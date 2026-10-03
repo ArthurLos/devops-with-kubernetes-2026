@@ -1,0 +1,5 @@
+node_modules/
+.env
+
+# internal working notes, not part of the course submission
+AGENTS.md
