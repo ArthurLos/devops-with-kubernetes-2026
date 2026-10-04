@@ -2,10 +2,14 @@
 
 Two containers sharing one Pod, communicating via a shared `emptyDir` volume:
 
-- **`writer/`** — generates a random string on startup, appends a line (timestamp + the string) to a shared file every 5 seconds. No HTTP server, no stdout logging anymore — the file *is* the log.
-- **`reader/`** — Express server; `GET /status` reads and returns the current contents of that shared file.
+- **`writer/`** — generates a random string on startup, (re)writes a line (timestamp + the string) to a shared file every 5 seconds, overwriting the previous one. No HTTP server, no stdout logging anymore — the file *is* the log.
+- **`reader/`** — Express server; `GET /status` returns that status line plus the current ping-pong request count (read from a separate shared `PersistentVolume`, see below), e.g.:
+  ```
+  2026-10-04T16:29:17.416Z: 1d0f0cba-d291-4963-a8e9-09d3d724948a.
+  Ping / Pongs: 3
+  ```
 
-The reader's port is configurable via the `PORT` environment variable (defaults to `3000`). Both containers agree on the shared file path via `FILE_PATH` (defaults to `/usr/src/app/shared/status.txt`), mounted from the same volume.
+The reader's port is configurable via the `PORT` environment variable (defaults to `3000`). The `writer`/`reader` pair agree on the status file path via `FILE_PATH` (defaults to `/usr/src/app/shared/status.txt`), mounted from an `emptyDir` volume local to this Pod. The ping-pong count comes from `COUNTER_FILE` (defaults to `/usr/src/app/pingpong/counter.txt`), mounted from the `PersistentVolume` shared with the `../ping-pong` app (`../manifests/persistentvolume.yaml` + `persistentvolumeclaim.yaml`).
 
 ## Local development
 
@@ -20,21 +24,23 @@ cd reader && FILE_PATH=/tmp/status.txt npm install && npm start
 
 ```bash
 # build both images (bump tags when the code changes)
-docker build -t log-output-writer:1.0.0 writer/
-docker build -t log-output-reader:1.0.0 reader/
+docker build -t log-output-writer:1.1.0 writer/
+docker build -t log-output-reader:1.1.0 reader/
 
 # get cluster name if you don't know it
 k3d cluster list
 
 # load them into your local cluster
-k3d image import log-output-writer:1.0.0 log-output-reader:1.0.0 -c <cluster-name>
+k3d image import log-output-writer:1.1.0 log-output-reader:1.1.0 -c <cluster-name>
+
+# the shared PersistentVolume/Claim and Ingress must exist first (repo root, span multiple apps)
+kubectl apply -f ../manifests/persistentvolume.yaml
+kubectl apply -f ../manifests/persistentvolumeclaim.yaml
+kubectl apply -f ../manifests/ingress.yaml
 
 # update the image tags in manifests/deployment.yaml to match, then apply
 kubectl apply -f manifests/deployment.yaml
 kubectl apply -f manifests/service.yaml
-
-# also (re)apply the shared ingress, defined at the repo root since it spans multiple apps
-kubectl apply -f ../manifests/ingress.yaml
 kubectl rollout status deployment/log-output
 
 # confirm it's running (2/2 containers ready)
