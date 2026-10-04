@@ -1,9 +1,12 @@
 {
   "name": "log-output",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^5.2.1"
   }
 }
