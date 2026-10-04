@@ -1,0 +1,9 @@
+{
+  "name": "log-output-writer",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  }
+}

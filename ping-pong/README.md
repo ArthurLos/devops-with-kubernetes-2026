@@ -2,7 +2,7 @@
 
 Responds to `GET /pingpong` with `pong <n>`, where `<n>` is an in-memory counter that increases on every request (resets when the pod restarts).
 
-Shares an Ingress with the `log_output` application (see `../manifests/ingress.yaml` at the repo root, since it spans both apps): requests to `/pingpong` are routed here, everything else goes to `log_output`.
+Shares an Ingress with the `log_output` application (see `../manifests/ingress.yaml` at the repo root, since it spans both apps): `/pingpong` routes here, `/status` goes to `log_output`.
 
 The port is configurable via the `PORT` environment variable (defaults to `3000`).
 

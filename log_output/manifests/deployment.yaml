@@ -12,10 +12,22 @@ spec:
       labels:
         app: log-output
     spec:
+      volumes:
+        - name: shared-status
+          emptyDir: {}
       containers:
-        - name: log-output
-          image: log-output:1.1.0
+        - name: writer
+          image: log-output-writer:1.0.0
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: shared-status
+              mountPath: /usr/src/app/shared
+        - name: reader
+          image: log-output-reader:1.0.0
           imagePullPolicy: IfNotPresent
           env:
             - name: PORT
               value: "3000"
+          volumeMounts:
+            - name: shared-status
+              mountPath: /usr/src/app/shared
