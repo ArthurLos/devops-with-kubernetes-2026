@@ -15,19 +15,30 @@ npm start
 ## Build and deploy
 
 ```bash
-# build the image
-docker build -t todo-app:1.0.0 .
+# build the image (bump the tag when the code changes)
+docker build -t todo-app:1.1.0 .
 
-# Get cluster name
-k3d cluster list 
+# get cluster name if you don't know it
+k3d cluster list
 
 # load it into your local cluster
-k3d image import todo-app:1.0.0 -c <cluster-name>
+k3d image import todo-app:1.1.0 -c <cluster-name>
 
-# apply the deployment
+# update the image tag in manifests/deployment.yaml to match, then apply
 kubectl apply -f manifests/deployment.yaml
+kubectl rollout status deployment/todo-app
 
 # confirm it's running
 kubectl get pods
 kubectl logs -f <pod-name>
 ```
+
+## Access it locally
+
+The app isn't exposed outside the cluster yet, so use port-forwarding to reach it:
+
+```bash
+kubectl port-forward deployment/todo-app 3000:3000
+```
+
+Then open http://localhost:3000 in a browser.
