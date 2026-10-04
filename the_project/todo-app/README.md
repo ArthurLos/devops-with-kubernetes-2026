@@ -1,6 +1,6 @@
 # todo-app
 
-Web server for the course project. `GET /` renders a page showing a random picture from [Lorem Picsum](https://picsum.photos); todo functionality is added in later exercises.
+Web server for the course project. `GET /` renders a page showing a random picture from [Lorem Picsum](https://picsum.photos), an input field + send button for new todos (not wired up yet, max 140 characters), and a list of hardcoded todos.
 
 The picture is cached on a `PersistentVolume` (`../../manifests/todo-app-persistentvolume.yaml` + `todo-app-persistentvolumeclaim.yaml`) for 10 minutes — `GET /image` serves the cached file and only fetches a new one from Picsum once it's older than that (or missing). This means the picture survives pod restarts without hitting the external API again, and only refreshes lazily on the next request after the cache expires, not on a background timer.
 
@@ -18,13 +18,13 @@ npm start
 
 ```bash
 # build the image (bump the tag when the code changes)
-docker build -t todo-app:1.2.0 .
+docker build -t todo-app:1.3.0 .
 
 # get cluster name if you don't know it
 k3d cluster list
 
 # load it into your local cluster
-k3d image import todo-app:1.2.0 -c <cluster-name>
+k3d image import todo-app:1.3.0 -c <cluster-name>
 
 # the PersistentVolume/Claim must exist first (repo root, admin-managed resource)
 kubectl apply -f ../../manifests/todo-app-persistentvolume.yaml
