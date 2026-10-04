@@ -26,6 +26,9 @@ k3d image import log-output:1.1.0 -c <cluster-name>
 # update the image tag in manifests/deployment.yaml to match, then apply
 kubectl apply -f manifests/deployment.yaml
 kubectl apply -f manifests/service.yaml
+
+# also (re)apply the shared ingress, defined at the repo root since it spans multiple apps
+kubectl apply -f ../manifests/ingress.yaml
 kubectl rollout status deployment/log-output
 
 # confirm it's running
@@ -35,10 +38,6 @@ kubectl logs -f <pod-name>
 
 ## Access it locally
 
-No Ingress for now (removed in exercise 1.8 to avoid colliding with the project's Ingress on path `/`; will come back once path-based routing is set up alongside the project). Use port-forwarding in the meantime:
+Exposed via the shared Ingress (`../manifests/ingress.yaml`), shared with the `../ping-pong` application: `/pingpong` routes there, everything else (`/`) comes here. Reachable on whichever host port your cluster maps to the ingress controller's port 80 (e.g. `http://localhost:8081`) — check your cluster's port mapping.
 
-```bash
-kubectl port-forward deployment/log-output 3000:3000
-```
-
-Then open http://localhost:3000 in a browser.
+Note: as of exercise 1.9, `the_project`'s own Ingress (`project-ingress`) also still claims path `/`, so which one actually wins for the root path is currently ambiguous until a later exercise reconciles the two.
