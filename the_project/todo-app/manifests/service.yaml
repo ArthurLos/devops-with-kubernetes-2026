@@ -3,10 +3,8 @@ kind: Service
 metadata:
   name: todo-app-svc
 spec:
-  type: NodePort
   selector:
     app: todo-app
   ports:
     - port: 3000
       targetPort: 3000
-      nodePort: 30080
