@@ -3,13 +3,17 @@
 Two containers sharing one Pod, communicating via a shared `emptyDir` volume:
 
 - **`writer/`** — generates a random string on startup, (re)writes a line (timestamp + the string) to a shared file every 5 seconds, overwriting the previous one. No HTTP server, no stdout logging anymore — the file *is* the log.
-- **`reader/`** — Express server; `GET /status` returns that status line plus the current ping-pong count, fetched live over HTTP from `../ping-pong` (`GET http://ping-pong-svc:3000/pings`, as of exercise 2.1 — no more shared volume between the two apps), e.g.:
+- **`reader/`** — Express server; `GET /status` returns the file content and env variable from a `ConfigMap` (exercise 2.5), then that status line plus the current ping-pong count, fetched live over HTTP from `../ping-pong` (`GET http://ping-pong-svc:3000/pings`, as of exercise 2.1 — no more shared volume between the two apps), e.g.:
   ```
+  file content: this text is from file
+  env variable: MESSAGE=hello world
   2026-10-04T16:29:17.416Z: 1d0f0cba-d291-4963-a8e9-09d3d724948a.
   Ping / Pongs: 3
   ```
 
 The reader's port is configurable via the `PORT` environment variable (defaults to `3000`); the ping-pong URL via `PINGPONG_URL` (defaults to `http://ping-pong-svc:3000/pings`). The `writer`/`reader` pair still agree on the status file path via `FILE_PATH` (defaults to `/usr/src/app/shared/status.txt`), mounted from an `emptyDir` volume local to this Pod — that one stays, it's internal to `log_output` itself.
+
+As of exercise 2.5, a `ConfigMap` (`manifests/configmap.yaml`, `log-output-config`) provides `information.txt` (mounted as a volume at `/usr/src/app/config/information.txt`, path configurable via `INFO_FILE_PATH`) and the `MESSAGE` env variable, both read by the reader and printed at the top of `/status`.
 
 As of exercise 2.3, this app runs in the `exercises` namespace (see `../manifests/namespace-exercises.yaml`), together with `../ping-pong` — every exercise outside `the_project` lives there from now on.
 
@@ -27,16 +31,17 @@ cd reader && FILE_PATH=/tmp/status.txt npm install && npm start
 ```bash
 # build both images (bump tags when the code changes)
 docker build -t log-output-writer:1.1.0 writer/
-docker build -t log-output-reader:1.2.0 reader/
+docker build -t log-output-reader:1.3.0 reader/
 
 # get cluster name if you don't know it
 k3d cluster list
 
 # load them into your local cluster
-k3d image import log-output-writer:1.1.0 log-output-reader:1.2.0 -c <cluster-name>
+k3d image import log-output-writer:1.1.0 log-output-reader:1.3.0 -c <cluster-name>
 
-# the exercises namespace and the shared Ingress must exist first (repo root, spans multiple apps)
+# the exercises namespace, the ConfigMap and the shared Ingress must exist first (repo root, spans multiple apps)
 kubectl apply -f ../manifests/namespace-exercises.yaml
+kubectl apply -f manifests/configmap.yaml
 kubectl apply -f ../manifests/ingress.yaml
 
 # update the image tags in manifests/deployment.yaml to match, then apply

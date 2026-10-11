@@ -5,6 +5,8 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const FILE_PATH = process.env.FILE_PATH || '/usr/src/app/shared/status.txt';
 const PINGPONG_URL = process.env.PINGPONG_URL || 'http://ping-pong-svc:3000/pings';
+const INFO_FILE_PATH = process.env.INFO_FILE_PATH || '/usr/src/app/config/information.txt';
+const MESSAGE = process.env.MESSAGE || '';
 
 app.get('/status', async (req, res) => {
   let status = 'No status written yet.';
@@ -22,7 +24,18 @@ app.get('/status', async (req, res) => {
     // ping-pong unreachable
   }
 
-  res.type('text/plain').send(`${status}\nPing / Pongs: ${pingPongs}\n`);
+  let fileContent = '';
+  try {
+    fileContent = fs.readFileSync(INFO_FILE_PATH, 'utf8').trim();
+  } catch (err) {
+    // ConfigMap volume not mounted
+  }
+
+  res.type('text/plain').send(
+    `file content: ${fileContent}\n` +
+    `env variable: MESSAGE=${MESSAGE}\n` +
+    `${status}\nPing / Pongs: ${pingPongs}\n`
+  );
 });
 
 app.listen(PORT, () => {
