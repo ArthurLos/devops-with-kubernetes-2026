@@ -11,6 +11,8 @@ Two containers sharing one Pod, communicating via a shared `emptyDir` volume:
 
 The reader's port is configurable via the `PORT` environment variable (defaults to `3000`); the ping-pong URL via `PINGPONG_URL` (defaults to `http://ping-pong-svc:3000/pings`). The `writer`/`reader` pair still agree on the status file path via `FILE_PATH` (defaults to `/usr/src/app/shared/status.txt`), mounted from an `emptyDir` volume local to this Pod — that one stays, it's internal to `log_output` itself.
 
+As of exercise 2.3, this app runs in the `exercises` namespace (see `../manifests/namespace-exercises.yaml`), together with `../ping-pong` — every exercise outside `the_project` lives there from now on.
+
 ## Local development
 
 Run both separately, pointing at the same local file:
@@ -33,20 +35,21 @@ k3d cluster list
 # load them into your local cluster
 k3d image import log-output-writer:1.1.0 log-output-reader:1.2.0 -c <cluster-name>
 
-# the shared Ingress must exist first (repo root, spans multiple apps)
+# the exercises namespace and the shared Ingress must exist first (repo root, spans multiple apps)
+kubectl apply -f ../manifests/namespace-exercises.yaml
 kubectl apply -f ../manifests/ingress.yaml
 
 # update the image tags in manifests/deployment.yaml to match, then apply
 kubectl apply -f manifests/deployment.yaml
 kubectl apply -f manifests/service.yaml
-kubectl rollout status deployment/log-output
+kubectl rollout status deployment/log-output -n exercises
 
 # confirm it's running (2/2 containers ready)
-kubectl get pods
+kubectl get pods -n exercises
 
 # logs per container, since there's more than one now
-kubectl logs -f <pod-name> -c writer
-kubectl logs -f <pod-name> -c reader
+kubectl logs -f <pod-name> -n exercises -c writer
+kubectl logs -f <pod-name> -n exercises -c reader
 ```
 
 Note: `writer` won't print anything to `kubectl logs` by design — it writes to the shared file instead. That's expected.

@@ -6,6 +6,8 @@ Shares an Ingress with the `log_output` application (see `../manifests/ingress.y
 
 The port is configurable via the `PORT` environment variable (defaults to `3000`).
 
+As of exercise 2.3, this app runs in the `exercises` namespace (see `../manifests/namespace-exercises.yaml`), together with `../log_output` — every exercise outside `the_project` lives there from now on.
+
 ## Local development
 
 ```bash
@@ -25,7 +27,8 @@ k3d cluster list
 # load it into your local cluster
 k3d image import ping-pong:1.2.0 -c <cluster-name>
 
-# the PersistentVolume/Claim and shared Ingress must exist first (repo root)
+# the exercises namespace, PersistentVolume/Claim and shared Ingress must exist first (repo root)
+kubectl apply -f ../manifests/namespace-exercises.yaml
 kubectl apply -f ../manifests/ping-pong-persistentvolume.yaml
 kubectl apply -f ../manifests/ping-pong-persistentvolumeclaim.yaml
 kubectl apply -f ../manifests/ingress.yaml
@@ -35,8 +38,8 @@ kubectl apply -f manifests/deployment.yaml
 kubectl apply -f manifests/service.yaml
 
 # confirm it's running
-kubectl get pods
-kubectl logs -f <pod-name>
+kubectl get pods -n exercises
+kubectl logs -f <pod-name> -n exercises
 ```
 
 ## Access it locally

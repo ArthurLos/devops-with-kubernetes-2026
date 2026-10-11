@@ -2,6 +2,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: ping-pong-pvc
+  namespace: exercises
 spec:
   storageClassName: ""
   volumeName: ping-pong-pv
