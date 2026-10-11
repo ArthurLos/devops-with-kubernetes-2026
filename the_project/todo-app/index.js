@@ -34,14 +34,18 @@ async function ensureFreshImage() {
   }
 }
 
-const HARDCODED_TODOS = [
-  'Learn Kubernetes basics',
-  'Deploy application to cluster',
-  'Configure persistent volumes',
-];
+const TODO_BACKEND_URL = process.env.TODO_BACKEND_URL || 'http://todo-backend-svc:2345/todos';
 
-app.get('/', (req, res) => {
-  const todoItems = HARDCODED_TODOS.map((todo) => `<li>${todo}</li>`).join('\n      ');
+app.get('/', async (req, res) => {
+  let todos = [];
+  try {
+    const response = await fetch(TODO_BACKEND_URL);
+    todos = await response.json();
+  } catch (err) {
+    // todo-backend unreachable, render an empty list
+  }
+
+  const todoItems = todos.map((todo) => `<li>${todo}</li>`).join('\n      ');
 
   res.send(`<!doctype html>
 <html>
@@ -77,28 +81,14 @@ app.get('/', (req, res) => {
   <body>
     <h1>Todo App</h1>
     <img src="/image" alt="Random picture" />
-    <form id="todo-form">
-      <input type="text" id="todo-input" maxlength="140" placeholder="Enter a new todo (max 140 characters)" />
+    <form method="POST" action="/todos">
+      <input type="text" name="text" maxlength="140" placeholder="Enter a new todo (max 140 characters)" required />
       <button type="submit">Send</button>
     </form>
     <h2>Todos</h2>
     <ul id="todo-list">
       ${todoItems}
     </ul>
-    <script>
-      document.getElementById('todo-form').addEventListener('submit', (event) => {
-        event.preventDefault();
-        const input = document.getElementById('todo-input');
-        const text = input.value.trim();
-        if (!text) return;
-
-        const li = document.createElement('li');
-        li.textContent = text;
-        document.getElementById('todo-list').appendChild(li);
-
-        input.value = '';
-      });
-    </script>
   </body>
 </html>`);
 });
