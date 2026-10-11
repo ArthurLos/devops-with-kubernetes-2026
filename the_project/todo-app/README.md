@@ -6,6 +6,8 @@ The picture is cached on a `PersistentVolume` (`../../manifests/todo-app-persist
 
 The port is configurable via the `PORT` environment variable (defaults to `3000`); the image cache directory via `IMAGE_DIR` (defaults to `/usr/src/app/images`); the backend URL via `TODO_BACKEND_URL` (defaults to `http://todo-backend-svc:2345/todos`).
 
+As of exercise 2.4, this app runs in its own `project` namespace (see `../../manifests/namespace-project.yaml`), together with `../todo-backend` — kept separate from the `exercises` namespace used by the standalone course exercises.
+
 ## Local development
 
 ```bash
@@ -26,8 +28,9 @@ k3d cluster list
 # load it into your local cluster
 k3d image import todo-app:1.4.0 -c <cluster-name>
 
-# the PersistentVolume/Claim must exist first (repo root, admin-managed resource),
+# the project namespace and PersistentVolume/Claim must exist first (repo root, admin-managed resources),
 # and ../todo-backend must be deployed too (this app fetches/posts todos from it)
+kubectl apply -f ../../manifests/namespace-project.yaml
 kubectl apply -f ../../manifests/todo-app-persistentvolume.yaml
 kubectl apply -f ../../manifests/todo-app-persistentvolumeclaim.yaml
 
@@ -35,11 +38,11 @@ kubectl apply -f ../../manifests/todo-app-persistentvolumeclaim.yaml
 kubectl apply -f manifests/deployment.yaml
 kubectl apply -f manifests/service.yaml
 kubectl apply -f manifests/ingress.yaml
-kubectl rollout status deployment/todo-app
+kubectl rollout status deployment/todo-app -n project
 
 # confirm it's running
-kubectl get pods
-kubectl logs -f <pod-name>
+kubectl get pods -n project
+kubectl logs -f <pod-name> -n project
 ```
 
 ## Access it locally
@@ -56,6 +59,8 @@ kubectl apply -f ../../manifests/todo-app-persistentvolume.yaml
 kubectl apply -f ../../manifests/todo-app-persistentvolumeclaim.yaml
 ```
 
+(The PV itself has no namespace — it's a cluster-scoped resource — only the PVC does.)
+
 ## Testing the image cache
 
 ```bash
@@ -65,7 +70,7 @@ curl -s -o b.jpg http://localhost:8081/image
 cmp a.jpg b.jpg   # identical -> cache works
 
 # simulate a crash/restart and confirm the picture survives
-kubectl delete pod -l app=todo-app
+kubectl delete pod -n project -l app=todo-app
 curl -s -o c.jpg http://localhost:8081/image
 cmp a.jpg c.jpg   # still identical -> cached on the PersistentVolume, not refetched
 ```
