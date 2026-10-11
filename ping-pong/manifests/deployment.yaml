@@ -13,16 +13,16 @@ spec:
         app: ping-pong
     spec:
       volumes:
-        - name: shared-data
+        - name: ping-pong-data
           persistentVolumeClaim:
-            claimName: shared-pvc
+            claimName: ping-pong-pvc
       containers:
         - name: ping-pong
-          image: ping-pong:1.1.0
+          image: ping-pong:1.2.0
           imagePullPolicy: IfNotPresent
           env:
             - name: PORT
               value: "3000"
           volumeMounts:
-            - name: shared-data
-              mountPath: /usr/src/app/shared
+            - name: ping-pong-data
+              mountPath: /usr/src/app/data

@@ -3,23 +3,28 @@ const express = require('express');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const COUNTER_FILE = process.env.COUNTER_FILE || '/usr/src/app/shared/counter.txt';
+const COUNTER_FILE = process.env.COUNTER_FILE || '/usr/src/app/data/counter.txt';
 
-function loadCounter() {
+function loadState() {
   try {
-    const lastShown = parseInt(fs.readFileSync(COUNTER_FILE, 'utf8'), 10) || 0;
-    return lastShown + 1; // file holds the last value we showed, resume one past it
+    const persisted = parseInt(fs.readFileSync(COUNTER_FILE, 'utf8'), 10) || 0;
+    return { lastShown: persisted, nextValue: persisted + 1 };
   } catch (err) {
-    return 0; // no file yet, truly fresh start
+    return { lastShown: 0, nextValue: 0 }; // no file yet, truly fresh start
   }
 }
 
-let counter = loadCounter();
+let { lastShown, nextValue } = loadState();
 
 app.get('/pingpong', (req, res) => {
-  res.send(`pong ${counter}`);
-  fs.writeFileSync(COUNTER_FILE, String(counter));
-  counter++;
+  lastShown = nextValue;
+  res.send(`pong ${lastShown}`);
+  fs.writeFileSync(COUNTER_FILE, String(lastShown));
+  nextValue++;
+});
+
+app.get('/pings', (req, res) => {
+  res.send(String(lastShown));
 });
 
 app.listen(PORT, () => {
