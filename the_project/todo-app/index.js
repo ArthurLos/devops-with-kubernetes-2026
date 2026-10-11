@@ -8,10 +8,12 @@ const PORT = process.env.PORT || 3000;
 const IMAGE_DIR = process.env.IMAGE_DIR || '/usr/src/app/images';
 const IMAGE_PATH = path.join(IMAGE_DIR, 'image.jpg');
 const META_PATH = path.join(IMAGE_DIR, 'fetched-at.txt');
-const CACHE_DURATION_MS = 10 * 60 * 1000;
+const CACHE_DURATION_MS = parseInt(process.env.CACHE_DURATION_MS, 10) || 10 * 60 * 1000;
+const PICSUM_URL = process.env.PICSUM_URL || 'https://picsum.photos/1200';
+const TODO_BACKEND_URL = process.env.TODO_BACKEND_URL || 'http://todo-backend-svc:2345/todos';
 
 async function fetchNewImage() {
-  const response = await fetch('https://picsum.photos/1200');
+  const response = await fetch(PICSUM_URL);
   const buffer = Buffer.from(await response.arrayBuffer());
   fs.mkdirSync(IMAGE_DIR, { recursive: true });
   fs.writeFileSync(IMAGE_PATH, buffer);
@@ -33,8 +35,6 @@ async function ensureFreshImage() {
     await fetchNewImage();
   }
 }
-
-const TODO_BACKEND_URL = process.env.TODO_BACKEND_URL || 'http://todo-backend-svc:2345/todos';
 
 app.get('/', async (req, res) => {
   let todos = [];

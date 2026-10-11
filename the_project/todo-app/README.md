@@ -4,7 +4,13 @@ Web server for the course project — a server-side rendered (SSR) app, not a SP
 
 The picture is cached on a `PersistentVolume` (`../../manifests/todo-app-persistentvolume.yaml` + `todo-app-persistentvolumeclaim.yaml`) for 10 minutes — `GET /image` serves the cached file and only fetches a new one from Picsum once it's older than that (or missing). This means the picture survives pod restarts without hitting the external API again, and only refreshes lazily on the next request after the cache expires, not on a background timer.
 
-The port is configurable via the `PORT` environment variable (defaults to `3000`); the image cache directory via `IMAGE_DIR` (defaults to `/usr/src/app/images`); the backend URL via `TODO_BACKEND_URL` (defaults to `http://todo-backend-svc:2345/todos`).
+As of exercise 2.6, every piece of configuration is an environment variable (no hardcoded ports, URLs, or durations in the source) — the fallback values below only kick in for local development (via `.env`/`dotenv`); in the cluster they're all set explicitly by `manifests/configmap.yaml` (`todo-app-config`) and `manifests/deployment.yaml`:
+
+- `PORT` (defaults to `3000`) — set directly in the Deployment, since it's container wiring rather than app config.
+- `IMAGE_DIR` (defaults to `/usr/src/app/images`) — where the cached picture + its fetch timestamp live.
+- `TODO_BACKEND_URL` (defaults to `http://todo-backend-svc:2345/todos`) — where todos are fetched from.
+- `PICSUM_URL` (defaults to `https://picsum.photos/1200`) — the external image source.
+- `CACHE_DURATION_MS` (defaults to `600000`, i.e. 10 minutes) — how long the cached picture stays valid.
 
 As of exercise 2.4, this app runs in its own `project` namespace (see `../../manifests/namespace-project.yaml`), together with `../todo-backend` — kept separate from the `exercises` namespace used by the standalone course exercises.
 
@@ -20,17 +26,18 @@ npm start
 
 ```bash
 # build the image (bump the tag when the code changes)
-docker build -t todo-app:1.4.0 .
+docker build -t todo-app:1.5.0 .
 
 # get cluster name if you don't know it
 k3d cluster list
 
 # load it into your local cluster
-k3d image import todo-app:1.4.0 -c <cluster-name>
+k3d image import todo-app:1.5.0 -c <cluster-name>
 
-# the project namespace and PersistentVolume/Claim must exist first (repo root, admin-managed resources),
+# the project namespace, ConfigMap and PersistentVolume/Claim must exist first (repo root, admin-managed resources),
 # and ../todo-backend must be deployed too (this app fetches/posts todos from it)
 kubectl apply -f ../../manifests/namespace-project.yaml
+kubectl apply -f manifests/configmap.yaml
 kubectl apply -f ../../manifests/todo-app-persistentvolume.yaml
 kubectl apply -f ../../manifests/todo-app-persistentvolumeclaim.yaml
 
