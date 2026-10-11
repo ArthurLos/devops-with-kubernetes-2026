@@ -6,7 +6,7 @@ Structure:
 - `log_output/` — the logging exercise project (early exercises)
 - `ping-pong/` — simple counter app, sharing an Ingress with `log_output`
 - `the_project/` — the main course project, growing over time (contains one subfolder per microservice, e.g. `todo-app/`)
-- `manifests/` — manifests that are either shared across apps or inherently cluster/admin-level (Namespaces, PersistentVolumes). Includes the two Namespaces (see below), the Ingress shared by `log_output` and `ping-pong`, `ping-pong`'s own PersistentVolume/Claim for its request counter, and `todo-app`'s own PersistentVolume/Claim for its cached picture (none of these PVs are app-specific resources, so they're kept separate from each app's own `manifests/` folder, even when only one app uses a given PV).
+- `manifests/` — manifests that are either shared across apps or inherently cluster/admin-level (Namespaces, PersistentVolumes). Includes the two Namespaces (see below), the Ingress shared by `log_output` and `ping-pong`, and `todo-app`'s own PersistentVolume/Claim for its cached picture (not app-specific resources, so kept separate from `todo-app`'s own `manifests/` folder even though only it uses this PV). `ping-pong`'s counter moved from its own PV to a Postgres `StatefulSet` in exercise 2.7 — see `ping-pong/manifests/`.
 
 Namespaces:
 - `exercises` (since 2.3) — `log_output` and `ping-pong`, i.e. everything from the standalone course exercises (outside the project). Used for all future exercises outside `the_project`.
@@ -41,3 +41,4 @@ Each finished exercise gets a git tag named after the exercise (e.g. `1.1`, `1.2
 - [2.4.](https://github.com/ArthurLos/devops-with-kubernetes-2026/tree/2.4/the_project)
 - [2.5.](https://github.com/ArthurLos/devops-with-kubernetes-2026/tree/2.5/log_output)
 - [2.6.](https://github.com/ArthurLos/devops-with-kubernetes-2026/tree/2.6/the_project)
+- [2.7.](https://github.com/ArthurLos/devops-with-kubernetes-2026/tree/2.7/ping-pong)
