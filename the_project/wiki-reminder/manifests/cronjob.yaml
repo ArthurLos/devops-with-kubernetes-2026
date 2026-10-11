@@ -1,0 +1,21 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: wiki-reminder
+  namespace: project
+spec:
+  schedule: "0 * * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          containers:
+            - name: wiki-reminder
+              image: wiki-reminder:1.0.0
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: TODO_BACKEND_URL
+                  value: http://todo-backend-svc:2345/todos
+          restartPolicy: OnFailure
