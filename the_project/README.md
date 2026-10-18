@@ -80,6 +80,14 @@ kustomize edit set namespace "$NAMESPACE"
 
 Tested by pushing a branch `test-3-7` with no other changes: the workflow created a brand-new `test-3-7` namespace with its own running Postgres/todo-app/todo-backend, completely independent of `project`.
 
+## Exercise 3.8: deleting a branch deletes its environment
+
+A second, separate workflow — `.github/workflows/delete-environment.yaml` — triggers on GitHub's [`delete`](https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#delete) event (fired whenever a branch or tag is deleted) and removes the matching namespace with `kubectl delete namespace "$NAMESPACE" --ignore-not-found`:
+
+- Guarded with `if: github.event.ref_type == 'branch' && github.event.ref != 'main'` — only reacts to an actual branch deletion, and never touches the `project` namespace (deleting the `main` branch isn't something GitHub even allows, but the check costs nothing).
+- The branch name comes in via an `env:` entry (`NAMESPACE: ${{ github.event.ref }}`) rather than being interpolated directly into the `run:` script — avoids a shell-injection risk from a maliciously-named branch, since GitHub Actions substitutes `${{ }}` expressions into `run:` steps as raw text before the shell ever sees them.
+- Deleting a namespace deletes everything in it in one go — Deployments, the StatefulSet (and its PVC, so that branch's Postgres data goes with it), Services, Ingress, the CronJob — no need to delete resources one by one.
+
 ## Deploying to GKE (manually)
 
 ```bash
