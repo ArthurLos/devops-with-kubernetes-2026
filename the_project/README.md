@@ -22,7 +22,49 @@ The shared `todo-app/manifests/ingress.yaml` is reused unchanged — GKE provisi
 
 **Important:** both `todo-app` and `todo-backend` need to respond `200` on `GET /` for this to work — GKE's Ingress health-checks a Service at `/` regardless of which path it's actually routed under. `todo-app` already serves a real page at `/`; `todo-backend` got a dedicated stub route for this in exercise 3.5 (see `todo-backend/README.md`) after the Ingress 502'd on `/todos` without it.
 
-## Deploying to GKE
+## Exercise 3.6: automatic deployment via GitHub Actions
+
+Pushing to `main` now builds, publishes and deploys the whole project automatically — `.github/workflows/main.yaml`:
+
+- **`build-publish`** job — a [matrix](https://docs.github.com/en/actions/using-jobs/using-a-build-matrix-for-your-jobs) over the three apps (`todo-app`, `todo-backend`, `wiki-reminder`) builds and pushes each image to Artifact Registry in parallel, tagged `<branch>-<commit-sha>` (so every push gets a unique, traceable image per app, no manual version bumps needed for CI deploys).
+- **`deploy`** job (runs after all three builds succeed) — uses `kustomize edit set image` to point this folder's `kustomization.yaml` at the three freshly-pushed image tags, then `kustomize build . | kubectl apply -f -`, and waits for each rollout.
+
+**Authentication** uses [Workload Identity Federation](https://cloud.google.com/iam/docs/workload-identity-federation) instead of a long-lived service account key — GitHub issues a short-lived OIDC token for each run, which Google Cloud exchanges for a token to impersonate the `github-actions-sa` service account, scoped so only this exact repo (`ArthurLos/devops-with-kubernetes-2026`) can do so. Nothing secret is stored in the repo itself. Set up once via:
+
+```bash
+gcloud iam service-accounts create "github-actions-sa" --display-name="GitHub Actions SA"
+
+gcloud projects add-iam-policy-binding dwk-gke-512012 \
+  --role="roles/artifactregistry.writer" \
+  --member="serviceAccount:github-actions-sa@dwk-gke-512012.iam.gserviceaccount.com"
+
+gcloud projects add-iam-policy-binding dwk-gke-512012 \
+  --role="roles/container.admin" \
+  --member="serviceAccount:github-actions-sa@dwk-gke-512012.iam.gserviceaccount.com"
+
+gcloud iam workload-identity-pools create "github-pool" --location="global"
+
+gcloud iam workload-identity-pools providers create-oidc "github-provider" \
+  --location="global" \
+  --workload-identity-pool="github-pool" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
+  --attribute-condition="assertion.repository=='ArthurLos/devops-with-kubernetes-2026'" \
+  --issuer-uri="https://token.actions.githubusercontent.com"
+
+gcloud iam service-accounts add-iam-policy-binding \
+  github-actions-sa@dwk-gke-512012.iam.gserviceaccount.com \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/projects/114361046393/locations/global/workloadIdentityPools/github-pool/attribute.repository/ArthurLos/devops-with-kubernetes-2026"
+```
+
+The workflow reads three secrets from a GitHub **environment** named `GKE_PROJECT` (referenced via `environment: GKE_PROJECT` in the workflow, must match exactly):
+- `GKE_PROJECT` — the GCP project ID (`dwk-gke-512012`).
+- `SERVICE_ACCOUNT` — `github-actions-sa@dwk-gke-512012.iam.gserviceaccount.com`.
+- `WORKLOAD_IDENTITY_PROVIDER` — `projects/114361046393/locations/global/workloadIdentityPools/github-pool/providers/github-provider`.
+
+**Note on `todo-app`'s Deployment strategy:** `todo-app/manifests/deployment.yaml` sets `strategy: type: Recreate` instead of the Kubernetes default `RollingUpdate`. `todo-app-pvc` is `ReadWriteOnce` (a GKE Persistent Disk only attaches to one node at a time); `RollingUpdate` tries to start the new pod before the old one releases the volume — possibly on a different node — which can get the deployment stuck waiting for a volume attachment. `Recreate` fully terminates the old pod (and releases the disk) before starting the new one, at the cost of a brief moment of downtime on deploy. This doesn't affect the data itself — the PVC and its underlying disk are independent of the Deployment's pod-replacement strategy, so whichever pod runs next mounts the exact same, still-intact volume.
+
+## Deploying to GKE (manually)
 
 ```bash
 # build and push each image (bump tags as needed, update kustomization.yaml's images: section to match)

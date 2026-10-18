@@ -5,6 +5,11 @@ metadata:
   namespace: project
 spec:
   replicas: 1
+  # Recreate, not the default RollingUpdate: todo-app-pvc is ReadWriteOnce (a GKE Persistent
+  # Disk only supports single-node attachment). RollingUpdate would try to start the new pod
+  # — possibly on a different node — before the old one releases the volume, and get stuck.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: todo-app
