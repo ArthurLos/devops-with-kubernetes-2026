@@ -2,8 +2,6 @@ name: Release project
 
 on:
   push:
-    branches:
-      - main
 
 permissions:
   contents: read
@@ -82,14 +80,27 @@ jobs:
       - name: Set up Kustomize
         uses: imranismail/setup-kustomize@v3
 
+      - name: 'Determine target namespace'
+        # The main branch keeps deploying to the project namespace (used since exercise
+        # 2.4); every other branch gets its own namespace named after itself, i.e. its
+        # own separate environment.
+        run: |-
+          if [ "$BRANCH" = "main" ]; then
+            echo "NAMESPACE=project" >> "$GITHUB_ENV"
+          else
+            echo "NAMESPACE=$BRANCH" >> "$GITHUB_ENV"
+          fi
+
       - name: Deploy
         working-directory: the_project
         run: |-
+          kubectl config set-context --current --namespace="$NAMESPACE"
+          kustomize edit set namespace "$NAMESPACE"
           kustomize edit set image todo-app="$REGISTRY/$PROJECT_ID/$REPOSITORY/todo-app:$BRANCH-$GITHUB_SHA"
           kustomize edit set image todo-backend="$REGISTRY/$PROJECT_ID/$REPOSITORY/todo-backend:$BRANCH-$GITHUB_SHA"
           kustomize edit set image wiki-reminder="$REGISTRY/$PROJECT_ID/$REPOSITORY/wiki-reminder:$BRANCH-$GITHUB_SHA"
           kustomize build . | kubectl apply -f -
-          kubectl rollout status statefulset/postgres-stset -n project
-          kubectl rollout status deployment/todo-backend -n project
-          kubectl rollout status deployment/todo-app -n project
-          kubectl get ingress -n project -o wide
+          kubectl rollout status statefulset/postgres-stset
+          kubectl rollout status deployment/todo-backend
+          kubectl rollout status deployment/todo-app
+          kubectl get ingress -o wide

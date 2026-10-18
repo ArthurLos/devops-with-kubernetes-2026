@@ -64,6 +64,22 @@ The workflow reads three secrets from a GitHub **environment** named `GKE_PROJEC
 
 **Note on `todo-app`'s Deployment strategy:** `todo-app/manifests/deployment.yaml` sets `strategy: type: Recreate` instead of the Kubernetes default `RollingUpdate`. `todo-app-pvc` is `ReadWriteOnce` (a GKE Persistent Disk only attaches to one node at a time); `RollingUpdate` tries to start the new pod before the old one releases the volume — possibly on a different node — which can get the deployment stuck waiting for a volume attachment. `Recreate` fully terminates the old pod (and releases the disk) before starting the new one, at the cost of a brief moment of downtime on deploy. This doesn't affect the data itself — the PVC and its underlying disk are independent of the Deployment's pod-replacement strategy, so whichever pod runs next mounts the exact same, still-intact volume.
 
+## Exercise 3.7: a separate environment per branch
+
+The workflow now triggers on a push to **any** branch (not just `main`), and deploys each one into its own namespace — a fully separate copy of the whole stack (Postgres, `todo-backend`, `todo-app`, `wiki-reminder`, Ingress):
+
+- `main` always deploys to the `project` namespace, same as every exercise since 2.4.
+- Any other branch deploys to a namespace **named after the branch itself**.
+
+This is driven by two new lines in the `deploy` job of `.github/workflows/main.yaml`:
+```bash
+kubectl config set-context --current --namespace="$NAMESPACE"
+kustomize edit set namespace "$NAMESPACE"
+```
+`kustomize edit set namespace` rewrites `kustomization.yaml`'s top-level `namespace:` field for that run only (the checkout is thrown away after the job, so the committed file never changes) — Kustomize then stamps every resource's `metadata.namespace` with it, **and** renames the `Namespace` resource itself (`manifests/namespace.yaml`, `name: project`) to match. That's why no separate `kubectl create namespace ... || true` step is needed, unlike the plain course example: our `kustomization.yaml` already includes the namespace as one of its own resources, so creating it is just part of the same `kubectl apply`.
+
+Tested by pushing a branch `test-3-7` with no other changes: the workflow created a brand-new `test-3-7` namespace with its own running Postgres/todo-app/todo-backend, completely independent of `project`.
+
 ## Deploying to GKE (manually)
 
 ```bash
