@@ -59,3 +59,4 @@ Each finished exercise gets a git tag named after the exercise (e.g. `1.1`, `1.2
 - [3.9.](https://github.com/ArthurLos/devops-with-kubernetes-2026/tree/3.9/the_project)
 - [3.10.](https://github.com/ArthurLos/devops-with-kubernetes-2026/tree/3.10/the_project)
 - [3.11.](https://github.com/ArthurLos/devops-with-kubernetes-2026/tree/3.11/the_project)
+- [3.12.](https://github.com/ArthurLos/devops-with-kubernetes-2026/tree/3.12/the_project)

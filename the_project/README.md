@@ -131,6 +131,23 @@ Every container in the project now sets `resources.requests`/`resources.limits` 
 
 Verified by re-applying (`kubectl apply -k .`) and confirming every Deployment/StatefulSet rolled out successfully, then re-running the same concurrent-`curl` load test and a manual `db-backup` `Job` — nothing was OOMKilled or CPU-throttled into failure, and actual usage stayed well under every limit.
 
+## Exercise 3.12: finding application logs in GKE
+
+GKE ships with Kubernetes Engine Monitoring already enabled — container stdout/stderr is sent to Cloud Logging automatically, no setup needed. To find a specific workload's logs:
+
+- **Easiest:** Kubernetes Engine → **Workloads** → select the workload (e.g. `todo-backend`) → **Container logs** link — opens Logs Explorer pre-filtered to exactly that workload.
+- **Manually in Logs Explorer**, the relevant filter fields are:
+  ```
+  resource.type="k8s_container"
+  resource.labels.cluster_name="dwk-cluster"
+  resource.labels.namespace_name="project"
+  resource.labels.container_name="todo-backend"
+  ```
+
+Verified by creating a new todo (`POST /todos`) with a distinctive marker text and finding it in Logs Explorer within seconds — both `todo-backend`'s `morgan` access-log line and its own `Received todo (...)` line (added in exercise 2.10) show up:
+
+![GKE Logs Explorer showing the log line for a newly created todo](docs/gke-logs-new-todo.png)
+
 ## Deploying to GKE (manually)
 
 ```bash
