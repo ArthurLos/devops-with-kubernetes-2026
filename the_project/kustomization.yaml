@@ -1,0 +1,34 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Order matters: Kustomize preserves this list's order in its output (unlike
+# `kubectl apply -f manifests/`, which applies alphabetically), so the namespace
+# comes first and nothing references a resource that doesn't exist yet.
+resources:
+  # Kustomize refuses to read files outside its own directory tree by default (a
+  # security restriction), so this is a local copy of ../manifests/namespace-project.yaml
+  # — that root-level file is kept too, for the local k3d/non-Kustomize workflow.
+  - manifests/namespace.yaml
+  - todo-backend/manifests/postgres-secret.yaml
+  - todo-backend/manifests/gke/postgres.yaml
+  - todo-backend/manifests/deployment.yaml
+  - todo-backend/manifests/gke/service.yaml
+  - todo-app/manifests/configmap.yaml
+  - todo-app/manifests/gke/pvc.yaml
+  - todo-app/manifests/deployment.yaml
+  - todo-app/manifests/gke/service.yaml
+  - todo-app/manifests/ingress.yaml
+  - wiki-reminder/manifests/cronjob.yaml
+
+# Rewrites each Deployment/CronJob's image to its Artifact Registry location for GKE,
+# without needing a separate copy of each of those manifests just for the image field.
+images:
+  - name: todo-app
+    newName: europe-west4-docker.pkg.dev/dwk-gke-512012/dwk-repo/todo-app
+    newTag: "1.5.0"
+  - name: todo-backend
+    newName: europe-west4-docker.pkg.dev/dwk-gke-512012/dwk-repo/todo-backend
+    newTag: "2.2.0"
+  - name: wiki-reminder
+    newName: europe-west4-docker.pkg.dev/dwk-gke-512012/dwk-repo/wiki-reminder
+    newTag: "1.0.0"

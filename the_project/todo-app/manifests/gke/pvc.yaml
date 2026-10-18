@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: todo-app-pvc
+  namespace: project
+spec:
+  # No storageClassName, no pre-made PersistentVolume: GKE automatically provisions a
+  # (default) Persistent Disk for an unset storage class. The local k3d setup instead
+  # binds to a specific hostPath PV (see ../../../manifests/todo-app-persistentvolume.yaml)
+  # pinned to one node, which has no GKE equivalent.
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi

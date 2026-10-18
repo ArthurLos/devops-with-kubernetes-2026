@@ -7,6 +7,8 @@ Backend microservice for the course project's todo functionality. As of exercise
 
 As of exercise 2.10, every request is logged (`morgan`'s `combined` format) and every submitted todo is logged explicitly with its length (`Received todo (<n> characters): "..."`), with a separate `Rejected todo: exceeds the 140 character limit` line when the length check fails — all picked up by the `../../monitoring` Loki/Alloy stack, so rejected submissions are visible with a query like `{namespace="project"} |= "Rejected"` in Grafana.
 
+As of exercise 3.5, the app also responds `200` on `GET /` — GKE's Ingress health-checks a backend Service at `/` regardless of which path it's actually routed under (`/todos` here), so without this the Ingress would never mark the backend healthy (discovered the hard way: the GKE deployment 502'd on `/todos` until this was added).
+
 Configuration is entirely via environment variables (no hardcoded ports/URLs in the source, consistent with exercise 2.6's project-wide rule):
 - `PORT` (defaults to `3000`).
 - `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` — read automatically by the `pg` client library; in the cluster these are set in `manifests/deployment.yaml` (`PGHOST`/`PGPORT` directly, the rest via `secretKeyRef` into `manifests/postgres-secret.yaml`'s `postgres-credentials` Secret, which Postgres itself also consumes via `envFrom`).
@@ -29,13 +31,13 @@ npm start
 
 ```bash
 # build the image (bump the tag when the code changes)
-docker build -t todo-backend:2.1.0 .
+docker build -t todo-backend:2.2.0 .
 
 # get cluster name if you don't know it
 k3d cluster list
 
 # load it into your local cluster
-k3d image import todo-backend:2.1.0 -c <cluster-name>
+k3d image import todo-backend:2.2.0 -c <cluster-name>
 
 # the project namespace, Postgres credentials/StatefulSet/Service must exist first (repo root for the namespace)
 kubectl apply -f ../../manifests/namespace-project.yaml
@@ -87,3 +89,7 @@ kubectl exec -n project postgres-stset-0 -- psql -U todobackend -d tododb -c "SE
 kubectl delete pod -n project postgres-stset-0
 curl http://localhost:8081/todos   # list is still there, not reset to the seed data
 ```
+
+## Deploying to GKE
+
+As of exercise 3.5, the whole project (this app, `../todo-app` and `../wiki-reminder`) is deployed to GKE as one unit via Kustomize — see `../README.md` and `../kustomization.yaml`, not this file's "Build and deploy" section (that one's for the local k3d cluster only). This app's own GKE-specific manifest is `manifests/gke/service.yaml` (`NodePort` instead of `ClusterIP`, same reasoning as `../../ping-pong`'s and `../../log_output`'s exercise 3.2 Services).
