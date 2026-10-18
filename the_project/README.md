@@ -88,6 +88,32 @@ A second, separate workflow — `.github/workflows/delete-environment.yaml` — 
 - The branch name comes in via an `env:` entry (`NAMESPACE: ${{ github.event.ref }}`) rather than being interpolated directly into the `run:` script — avoids a shell-injection risk from a maliciously-named branch, since GitHub Actions substitutes `${{ }}` expressions into `run:` steps as raw text before the shell ever sees them.
 - Deleting a namespace deletes everything in it in one go — Deployments, the StatefulSet (and its PVC, so that branch's Postgres data goes with it), Services, Ingress, the CronJob — no need to delete resources one by one.
 
+## Exercise 3.9: DBaaS vs DIY
+
+Since exercise 2.7/2.8, this project has run Postgres itself — a `StatefulSet` + `PersistentVolumeClaim` (`todo-backend/manifests/postgres.yaml` locally, `todo-backend/manifests/gke/postgres.yaml` on GKE), with GKE auto-provisioning the underlying Persistent Disk. The alternative the course material raises is a **Database as a Service (DBaaS)**, e.g. [Cloud SQL for PostgreSQL](https://cloud.google.com/sql/postgresql) — Google runs the actual database server, we just connect to an endpoint.
+
+### Work to initialize
+
+- **DIY:** already done — one more `StatefulSet` + `Secret` in the same `kubectl apply -k .` as everything else. No new GCP API, no separate provisioning step.
+- **DBaaS:** a genuinely separate resource to provision and wire up — enable the Cloud SQL Admin API, create an instance (region, tier, HA or not), create the database/user, then connect from the cluster via either a [Cloud SQL Auth Proxy](https://cloud.google.com/sql/docs/postgres/connect-auth-proxy) sidecar container or Private IP/VPC peering, since it isn't reachable via a simple in-cluster `ClusterIP`/headless Service like our own StatefulSet is.
+
+### Cost to initialize/run
+
+- **DIY:** effectively free beyond the already-running cluster — just compute + a small Persistent Disk, both billed as part of the GKE node pool/disk costs we're paying for anyway. Deleting the GKE cluster (as we do between sessions, to stay within the course's free trial credits) stops all of it from billing too.
+- **DBaaS:** a Cloud SQL instance is a **separate, always-on** billable resource — even the cheapest shared-core tier costs money every hour, independent of whether the GKE cluster exists at all. For a course relying on limited free trial credits, that matters: you'd have to remember to also stop/delete the Cloud SQL instance separately, or it keeps draining credits even while the "cluster deleted between sessions" habit is otherwise working.
+
+### Maintenance
+
+- **DIY:** we own all of it — OS and Postgres version patching, no built-in failover (one replica, so if the pod dies the app has no DB access until it reschedules), and any tuning or config change means editing and re-rolling the `StatefulSet` ourselves.
+- **DBaaS:** Google handles OS/minor-version patching, and an HA (regional) configuration gives automatic failover to a standby — for money, not effort. Built-in monitoring integrates with the same Cloud Monitoring/Logging used for the rest of GKE (relevant for exercise 3.12).
+
+### Backups
+
+- **DIY:** entirely manual and our own responsibility — this is exactly what exercise 3.10 (next) has us build by hand: a `CronJob` running `pg_dump`, pushed to Cloud Storage ourselves, with no restore tooling beyond whatever we also write. Easy to get wrong or forget — the Chapter "Deployment Pipeline" reading material's own `pg_dump` example notes its backup "was not saved anywhere" as a cautionary example of exactly this risk.
+- **DBaaS:** built-in automated daily backups and point-in-time recovery (via WAL replay) are a couple of `gcloud sql instances patch` flags away (`--backup-start-time`, `--enable-point-in-time-recovery`), restorable from the Console or CLI without writing or maintaining any of that tooling ourselves.
+
+**Verdict for this project:** DIY is the right call *here*, specifically because of the cost structure — it piggybacks on infrastructure (the cluster) we're deleting and recreating around our own schedule anyway, with zero extra always-on billing, and stays declarative/reproducible through the same Kustomize + git workflow as everything else. For a real production system without a hard, limited credit budget, Cloud SQL's maintenance and backup story would likely be worth the extra cost well before the DIY approach's manual backup/failover gaps turn into an actual incident — engineer time spent babysitting a hand-rolled Postgres and testing that its backups actually restore isn't free either, it's just a cost that doesn't show up on the GCP bill.
+
 ## Deploying to GKE (manually)
 
 ```bash
