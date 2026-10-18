@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: log-output
+  namespace: exercises
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: log-output
+  template:
+    metadata:
+      labels:
+        app: log-output
+    spec:
+      volumes:
+        - name: shared-status
+          emptyDir: {}
+        - name: log-output-config
+          configMap:
+            name: log-output-config
+            items:
+              - key: information
+                path: information.txt
+      containers:
+        - name: writer
+          image: europe-west4-docker.pkg.dev/dwk-gke-512012/dwk-repo/log-output-writer:1.1.0
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: shared-status
+              mountPath: /usr/src/app/shared
+        - name: reader
+          image: europe-west4-docker.pkg.dev/dwk-gke-512012/dwk-repo/log-output-reader:1.4.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PORT
+              value: "3000"
+            - name: MESSAGE
+              valueFrom:
+                configMapKeyRef:
+                  name: log-output-config
+                  key: MESSAGE
+          volumeMounts:
+            - name: shared-status
+              mountPath: /usr/src/app/shared
+            - name: log-output-config
+              mountPath: /usr/src/app/config

@@ -8,6 +8,12 @@ const PINGPONG_URL = process.env.PINGPONG_URL || 'http://ping-pong-svc:3000/ping
 const INFO_FILE_PATH = process.env.INFO_FILE_PATH || '/usr/src/app/config/information.txt';
 const MESSAGE = process.env.MESSAGE || '';
 
+// GKE's Ingress health check always GETs / on the backend Service, regardless of
+// which path it's actually routed under (here /status) — it must return 200.
+app.get('/', (req, res) => {
+  res.sendStatus(200);
+});
+
 app.get('/status', async (req, res) => {
   let status = 'No status written yet.';
   try {

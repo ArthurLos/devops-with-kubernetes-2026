@@ -49,3 +49,4 @@ Each finished exercise gets a git tag named after the exercise (e.g. `1.1`, `1.2
 ### Chapter 4
 
 - [3.1.](https://github.com/ArthurLos/devops-with-kubernetes-2026/tree/3.1/ping-pong)
+- [3.2.](https://github.com/ArthurLos/devops-with-kubernetes-2026/tree/3.2/log_output)

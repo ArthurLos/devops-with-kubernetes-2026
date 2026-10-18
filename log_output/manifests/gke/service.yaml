@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: log-output-svc
+  namespace: exercises
+spec:
+  # NodePort, not ClusterIP: GKE's Ingress (exercise 3.2) requires a NodePort backend Service.
+  type: NodePort
+  selector:
+    app: log-output
+  ports:
+    - port: 2345
+      targetPort: 3000

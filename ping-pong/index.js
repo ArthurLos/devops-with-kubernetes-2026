@@ -32,6 +32,12 @@ async function ensureTable() {
   }
 }
 
+// GKE's Ingress health check always GETs / on the backend Service, regardless of
+// which path it's actually routed under (here /pingpong) — it must return 200.
+app.get('/', (req, res) => {
+  res.sendStatus(200);
+});
+
 app.get('/pingpong', async (req, res) => {
   const value = nextValue;
   lastShown = value;
