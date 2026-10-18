@@ -2,6 +2,11 @@ name: Release project
 
 on:
   push:
+    # Explicit branches filter (not a bare `push:`) so this only runs for branch
+    # pushes, not for exercise git tags (e.g. `3.7`) — those aren't valid namespace
+    # names and would just fail the per-branch deploy from exercise 3.7.
+    branches:
+      - '**'
 
 permissions:
   contents: read
