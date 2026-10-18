@@ -3,7 +3,9 @@
 Backend microservice for the course project's todo functionality. As of exercise 2.8, todos are persisted in a **Postgres database** (`manifests/postgres.yaml` — a `StatefulSet` with one replica, `postgres-stset`, plus its headless `postgres-svc`), so they survive pod restarts — including Postgres' own restarts, since its data lives on a `PersistentVolumeClaim` dynamically provisioned via `volumeClaimTemplates` (k3d's built-in `local-path` storage class, no manual `PersistentVolume` needed). On first start the table is seeded with the same three example todos the old in-memory version shipped with.
 
 - `GET /todos` — returns the current list as JSON.
-- `POST /todos` — adds a new todo (`text` field, max 140 characters, trimmed). Content-type decides the response: `application/json` requests get the updated list back (`201`), anything else (e.g. a plain HTML form submission) gets redirected to `/` so the browser lands back on `../todo-app`'s page with the updated list.
+- `POST /todos` — adds a new todo (`text` field, trimmed). As of exercise 2.10, a todo over 140 characters is **rejected** with `400` (not silently truncated) — `application/json` requests get `{"error": "..."}` back, anything else gets a plain-text body with the same message. Otherwise, content-type decides the success response: `application/json` requests get the updated list back (`201`), anything else (e.g. a plain HTML form submission) gets redirected to `/` so the browser lands back on `../todo-app`'s page with the updated list.
+
+As of exercise 2.10, every request is logged (`morgan`'s `combined` format) and every submitted todo is logged explicitly with its length (`Received todo (<n> characters): "..."`), with a separate `Rejected todo: exceeds the 140 character limit` line when the length check fails — all picked up by the `../../monitoring` Loki/Alloy stack, so rejected submissions are visible with a query like `{namespace="project"} |= "Rejected"` in Grafana.
 
 Configuration is entirely via environment variables (no hardcoded ports/URLs in the source, consistent with exercise 2.6's project-wide rule):
 - `PORT` (defaults to `3000`).
@@ -27,13 +29,13 @@ npm start
 
 ```bash
 # build the image (bump the tag when the code changes)
-docker build -t todo-backend:2.0.0 .
+docker build -t todo-backend:2.1.0 .
 
 # get cluster name if you don't know it
 k3d cluster list
 
 # load it into your local cluster
-k3d image import todo-backend:2.0.0 -c <cluster-name>
+k3d image import todo-backend:2.1.0 -c <cluster-name>
 
 # the project namespace, Postgres credentials/StatefulSet/Service must exist first (repo root for the namespace)
 kubectl apply -f ../../manifests/namespace-project.yaml
@@ -66,6 +68,9 @@ curl -i -X POST -d "text=Write the Kubernetes submission" http://localhost:8081/
 
 # add one via JSON (returns the updated list)
 curl -i -X POST -H "Content-Type: application/json" -d '{"text":"Test via JSON"}' http://localhost:8081/todos
+
+# a todo over 140 characters is rejected with 400
+curl -i -X POST -H "Content-Type: application/json" -d "{\"text\":\"$(printf 'x%.0s' {1..150})\"}" http://localhost:8081/todos
 ```
 
 ## Note on the database

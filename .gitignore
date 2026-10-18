@@ -3,3 +3,6 @@ node_modules/
 
 # internal working notes, not part of the course submission
 AGENTS.md
+
+# chapter reading material (Helm/Prometheus/Loki/Grafana), not a graded exercise
+monitoring/

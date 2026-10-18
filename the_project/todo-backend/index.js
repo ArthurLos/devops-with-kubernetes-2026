@@ -1,10 +1,12 @@
 require('dotenv').config();
 const express = require('express');
+const morgan = require('morgan');
 const { Pool } = require('pg');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const RETRY_DELAY_MS = 2000;
+const MAX_TODO_LENGTH = 140;
 
 const pool = new Pool();
 
@@ -14,6 +16,7 @@ pool.on('error', (err) => {
   console.error('Unexpected Postgres pool error:', err.message);
 });
 
+app.use(morgan('combined'));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
@@ -45,7 +48,18 @@ app.get('/todos', async (req, res) => {
 });
 
 app.post('/todos', async (req, res) => {
-  const text = (req.body.text || '').trim().slice(0, 140);
+  const text = (req.body.text || '').trim();
+  console.log(`Received todo (${text.length} characters): "${text}"`);
+
+  if (text.length > MAX_TODO_LENGTH) {
+    console.warn(`Rejected todo: exceeds the ${MAX_TODO_LENGTH} character limit`);
+    const message = `Todo must be at most ${MAX_TODO_LENGTH} characters`;
+    if (req.is('application/json')) {
+      return res.status(400).json({ error: message });
+    }
+    return res.status(400).send(message);
+  }
+
   if (text) {
     await pool.query('INSERT INTO todos (text) VALUES ($1)', [text]);
   }

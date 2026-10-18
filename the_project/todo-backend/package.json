@@ -1,6 +1,6 @@
 {
   "name": "todo-backend",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "main": "index.js",
   "scripts": {
@@ -9,6 +9,7 @@
   "dependencies": {
     "dotenv": "^18.0.7",
     "express": "^5.2.1",
+    "morgan": "^1.10.1",
     "pg": "^8.23.1"
   }
 }
