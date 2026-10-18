@@ -15,6 +15,13 @@ spec:
             - name: wiki-reminder
               image: wiki-reminder:1.0.0
               imagePullPolicy: IfNotPresent
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 100m
+                  memory: 64Mi
               env:
                 - name: TODO_BACKEND_URL
                   value: http://todo-backend-svc:2345/todos

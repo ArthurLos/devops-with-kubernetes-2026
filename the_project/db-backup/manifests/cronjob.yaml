@@ -15,6 +15,13 @@ spec:
             - name: db-backup
               image: db-backup:1.0.0
               imagePullPolicy: IfNotPresent
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 300m
+                  memory: 512Mi
               env:
                 - name: PGHOST
                   value: postgres-svc

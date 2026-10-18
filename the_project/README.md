@@ -120,6 +120,17 @@ New component: `db-backup/` — a `CronJob` that `pg_dump`s the todo database on
 
 Tested by manually triggering a `Job` from the `CronJob` (`kubectl create job --from=cronjob/db-backup`) and confirming the dump landed in `gs://dwk-gke-512012-todo-backup/`.
 
+## Exercise 3.11: resource requests and limits
+
+Every container in the project now sets `resources.requests`/`resources.limits` (CPU/memory), chosen from actual measurements rather than guesses — `kubectl top pods -n project` on GKE, both idle and under a burst of concurrent `curl` requests against the Ingress:
+
+- `todo-app` / `todo-backend`: idle ~1-3m CPU / ~22-27Mi memory, briefly up to ~30-35m CPU under concurrent load → `requests: 20m CPU / 64Mi memory`, `limits: 200m CPU / 128Mi memory` for both (several times headroom above observed peak).
+- `postgres`: idle ~1-2m CPU / ~34-36Mi memory → `requests: 50m CPU / 128Mi memory`, `limits: 500m CPU / 256Mi memory` (more generous, since it has no replica to fail over to if it gets OOM-killed).
+- `wiki-reminder`: a short-lived `curl`+`bash` script, barely measurable → `requests: 10m CPU / 32Mi memory`, `limits: 100m CPU / 64Mi memory`.
+- `db-backup`: the heaviest of the short-lived jobs (full `google-cloud-sdk` + Python, not just `curl`) → `requests: 50m CPU / 128Mi memory`, `limits: 300m CPU / 512Mi memory`.
+
+Verified by re-applying (`kubectl apply -k .`) and confirming every Deployment/StatefulSet rolled out successfully, then re-running the same concurrent-`curl` load test and a manual `db-backup` `Job` — nothing was OOMKilled or CPU-throttled into failure, and actual usage stayed well under every limit.
+
 ## Deploying to GKE (manually)
 
 ```bash
