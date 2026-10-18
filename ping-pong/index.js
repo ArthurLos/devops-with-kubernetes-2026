@@ -32,13 +32,11 @@ async function ensureTable() {
   }
 }
 
-// GKE's Ingress health check always GETs / on the backend Service, regardless of
-// which path it's actually routed under (here /pingpong) — it must return 200.
-app.get('/', (req, res) => {
-  res.sendStatus(200);
-});
-
-app.get('/pingpong', async (req, res) => {
+// As of exercise 3.4, the app responds on / instead of /pingpong — the cluster-level
+// URL structure (whoever routes /pingpong here) is handled by a Gateway API URLRewrite
+// filter instead of being reflected in the app itself. This also serves as GKE's
+// Ingress/Gateway health check endpoint, which always GETs / regardless of routed path.
+app.get('/', async (req, res) => {
   const value = nextValue;
   lastShown = value;
   nextValue++;

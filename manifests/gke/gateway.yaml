@@ -26,6 +26,14 @@ spec:
         - path:
             type: PathPrefix
             value: /pingpong
+      # As of exercise 3.4: the app responds on / (not /pingpong) — rewrite the path
+      # here instead of making the app aware of this cluster-level URL structure.
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /
       backendRefs:
         - name: ping-pong-svc
           port: 3000

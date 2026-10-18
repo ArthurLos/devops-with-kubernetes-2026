@@ -1,8 +1,8 @@
 # ping-pong
 
-Responds to `GET /pingpong` with `pong <n>`. The counter lives in memory for speed, and as of exercise 2.7 is persisted to a **Postgres database** (`manifests/postgres.yaml` — a `StatefulSet` with one replica, `postgres-stset`, plus its headless `postgres-svc`), so it survives pod restarts — including Postgres' own restarts, since its data lives on a `PersistentVolumeClaim` dynamically provisioned per-replica via `volumeClaimTemplates` (k3d's built-in `local-path` storage class, no manual `PersistentVolume` needed). This replaced the old file-based `PersistentVolume` from exercise 2.1. As of exercise 2.1 the counter is no longer shared with `log_output` via a volume either — that app now reads the count over HTTP instead (`GET /pings`, plain text, same value as the last `pong` shown).
+Responds to `GET /` with `pong <n>` (moved from `/pingpong` in exercise 3.4, see below). The counter lives in memory for speed, and as of exercise 2.7 is persisted to a **Postgres database** (`manifests/postgres.yaml` — a `StatefulSet` with one replica, `postgres-stset`, plus its headless `postgres-svc`), so it survives pod restarts — including Postgres' own restarts, since its data lives on a `PersistentVolumeClaim` dynamically provisioned per-replica via `volumeClaimTemplates` (k3d's built-in `local-path` storage class, no manual `PersistentVolume` needed). This replaced the old file-based `PersistentVolume` from exercise 2.1. As of exercise 2.1 the counter is no longer shared with `log_output` via a volume either — that app now reads the count over HTTP instead (`GET /pings`, plain text, same value as the last `pong` shown).
 
-Shares an Ingress with the `log_output` application (see `../manifests/ingress.yaml` at the repo root, since it spans both apps): `/pingpong` routes here, `/status` goes to `log_output`.
+Shares an Ingress with the `log_output` application on the local k3d cluster (see `../manifests/ingress.yaml` at the repo root, since it spans both apps): `/pingpong` routes here, `/status` goes to `log_output`. **Note:** as of exercise 3.4 the app no longer serves `/pingpong` itself (see below), so this local Ingress route is stale — it was never updated to also rewrite the path, since the local cluster doesn't yet have a Gateway API implementation installed (that's an optional, not-yet-assigned step at the end of the course's cloud chapter). `/` and `/pings` still work locally via `kubectl port-forward` or a direct in-cluster request to `ping-pong-svc`.
 
 Configuration is entirely via environment variables (no hardcoded ports/URLs in the source, consistent with exercise 2.6's project-wide rule):
 - `PORT` (defaults to `3000`).
@@ -10,7 +10,7 @@ Configuration is entirely via environment variables (no hardcoded ports/URLs in 
 
 On startup the app retries connecting to Postgres (every 2s) until it succeeds, since the database StatefulSet might not be ready yet when this Pod starts — see the hint in exercise 2.7. It also registers a `pool.on('error', ...)` handler: without one, an unexpected connection drop (e.g. the Postgres pod restarting) crashes the whole Node process instead of just failing the in-flight query.
 
-As of exercise 3.2, the app also responds `200` on `GET /` — GKE's Ingress health-checks a backend Service at `/` regardless of which path it's actually routed under (`/pingpong` here), so without this the Ingress would never mark the backend healthy.
+As of exercise 3.2, the app also needed to respond `200` on `GET /` for GKE's Ingress health check (which always checks `/`, regardless of which path it's actually routed under). As of exercise 3.4, `/` *is* the real `pingpong` endpoint (see below), so that requirement is satisfied automatically — no separate stub route needed anymore.
 
 As of exercise 2.3, this app runs in the `exercises` namespace (see `../manifests/namespace-exercises.yaml`), together with `../log_output` — every exercise outside `the_project` lives there from now on.
 
@@ -28,13 +28,13 @@ npm start
 
 ```bash
 # build the image (bump the tag when the code changes)
-docker build -t ping-pong:2.1.0 .
+docker build -t ping-pong:2.2.0 .
 
 # get cluster name if you don't know it
 k3d cluster list
 
 # load it into your local cluster
-k3d image import ping-pong:2.1.0 -c <cluster-name>
+k3d image import ping-pong:2.2.0 -c <cluster-name>
 
 # the exercises namespace, Postgres credentials/StatefulSet/Service and shared Ingress must exist first (repo root for the namespace/Ingress)
 kubectl apply -f ../manifests/namespace-exercises.yaml
@@ -92,10 +92,10 @@ gcloud container clusters create dwk-cluster --zone=europe-west4-a --cluster-ver
 gcloud container clusters get-credentials dwk-cluster --zone=europe-west4-a   # if kubectl isn't already pointed at it
 
 # build and push the image (bump the tag/project/repo as needed)
-docker build -t ping-pong:2.1.0 .
+docker build -t ping-pong:2.2.0 .
 gcloud auth configure-docker europe-west4-docker.pkg.dev
-docker tag ping-pong:2.1.0 europe-west4-docker.pkg.dev/<project-id>/dwk-repo/ping-pong:2.1.0
-docker push europe-west4-docker.pkg.dev/<project-id>/dwk-repo/ping-pong:2.1.0
+docker tag ping-pong:2.2.0 europe-west4-docker.pkg.dev/<project-id>/dwk-repo/ping-pong:2.2.0
+docker push europe-west4-docker.pkg.dev/<project-id>/dwk-repo/ping-pong:2.2.0
 
 # deploy (namespace and Secret are the same files used locally)
 kubectl apply -f ../manifests/namespace-exercises.yaml
@@ -135,4 +135,18 @@ curl http://<gateway-address>/pingpong
 
 # the old Ingress is no longer needed once the Gateway works — remove it to avoid paying for two load balancers
 kubectl delete -f ../manifests/ingress.yaml
+```
+
+## Exercise 3.4: rewritten routing
+
+The app now responds on `/` instead of `/pingpong` — rather than baking the cluster's external URL structure (`/pingpong`) into the app itself, that translation now lives entirely in the `HTTPRoute`'s `URLRewrite` filter (`../manifests/gke/gateway.yaml`): a request matching the `/pingpong` prefix gets its path rewritten to `/` (via `ReplacePrefixMatch`) before being forwarded to `ping-pong-svc`. This is the same `URLRewrite`/`ReplacePrefixMatch` mechanism Ingress has no equivalent for — one of the concrete advantages of the Gateway API mentioned in the course material.
+
+A side effect: since the old `/` health-check stub and the real `pingpong` logic are now the same route, GKE's health check (also always `GET /`) exercises the real counter logic directly — no separate dummy route needed anymore (see the note above).
+
+**Local k3d note:** this exercise is GKE/Gateway-specific. The local Ingress (`../manifests/ingress.yaml`, Traefik-backed) has no rewrite rule and still forwards the literal `/pingpong` path, which now 404s against this app — that's expected, not a bug, since local cluster has no Gateway API implementation installed (see the course's separate, not-yet-assigned "Using the Gateway API in the k3d cluster" section for how that would be added later with Envoy Gateway). Locally, use `/` directly (e.g. via `kubectl port-forward svc/ping-pong-svc -n exercises 3000:3000` or an in-cluster request) instead of going through the Ingress.
+
+```bash
+# after bumping gke/deployment.yaml's image tag and re-applying it
+kubectl apply -f ../manifests/gke/gateway.yaml   # picks up the new URLRewrite filter
+curl http://<gateway-address>/pingpong           # now rewritten to / before reaching the app
 ```
