@@ -19,6 +19,10 @@ resources:
   - todo-app/manifests/gke/service.yaml
   - todo-app/manifests/ingress.yaml
   - wiki-reminder/manifests/cronjob.yaml
+  # storage-sa-key (the GCS backup service account key) is intentionally NOT a resource
+  # here — per exercise 3.10, it's created once by hand with `kubectl create secret`,
+  # never committed or built by CI. See db-backup/README.md.
+  - db-backup/manifests/cronjob.yaml
 
 # Rewrites each Deployment/CronJob's image to its Artifact Registry location for GKE,
 # without needing a separate copy of each of those manifests just for the image field.
@@ -31,4 +35,7 @@ images:
     newTag: "2.2.0"
   - name: wiki-reminder
     newName: europe-west4-docker.pkg.dev/dwk-gke-512012/dwk-repo/wiki-reminder
+    newTag: "1.0.0"
+  - name: db-backup
+    newName: europe-west4-docker.pkg.dev/dwk-gke-512012/dwk-repo/db-backup
     newTag: "1.0.0"

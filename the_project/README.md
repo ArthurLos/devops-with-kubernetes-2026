@@ -114,6 +114,12 @@ Since exercise 2.7/2.8, this project has run Postgres itself — a `StatefulSet`
 
 **Verdict for this project:** DIY is the right call *here*, specifically because of the cost structure — it piggybacks on infrastructure (the cluster) we're deleting and recreating around our own schedule anyway, with zero extra always-on billing, and stays declarative/reproducible through the same Kustomize + git workflow as everything else. For a real production system without a hard, limited credit budget, Cloud SQL's maintenance and backup story would likely be worth the extra cost well before the DIY approach's manual backup/failover gaps turn into an actual incident — engineer time spent babysitting a hand-rolled Postgres and testing that its backups actually restore isn't free either, it's just a cost that doesn't show up on the GCP bill.
 
+## Exercise 3.10: backing up the database to Google Cloud Storage
+
+New component: `db-backup/` — a `CronJob` that `pg_dump`s the todo database once every 24 hours and uploads it to a GCS bucket. See `db-backup/README.md` for the full picture, including the one-time manual setup (bucket, a dedicated bucket-scoped service account, and the `storage-sa-key` Secret — per the exercise instructions, that Secret is created by hand with `kubectl create secret`, not through Kustomize or the GitHub Actions pipeline, so no key ever touches git).
+
+Tested by manually triggering a `Job` from the `CronJob` (`kubectl create job --from=cronjob/db-backup`) and confirming the dump landed in `gs://dwk-gke-512012-todo-backup/`.
+
 ## Deploying to GKE (manually)
 
 ```bash

@@ -34,6 +34,8 @@ jobs:
             context: the_project/todo-backend
           - name: wiki-reminder
             context: the_project/wiki-reminder
+          - name: db-backup
+            context: the_project/db-backup
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -104,6 +106,7 @@ jobs:
           kustomize edit set image todo-app="$REGISTRY/$PROJECT_ID/$REPOSITORY/todo-app:$BRANCH-$GITHUB_SHA"
           kustomize edit set image todo-backend="$REGISTRY/$PROJECT_ID/$REPOSITORY/todo-backend:$BRANCH-$GITHUB_SHA"
           kustomize edit set image wiki-reminder="$REGISTRY/$PROJECT_ID/$REPOSITORY/wiki-reminder:$BRANCH-$GITHUB_SHA"
+          kustomize edit set image db-backup="$REGISTRY/$PROJECT_ID/$REPOSITORY/db-backup:$BRANCH-$GITHUB_SHA"
           kustomize build . | kubectl apply -f -
           kubectl rollout status statefulset/postgres-stset
           kubectl rollout status deployment/todo-backend

@@ -1,0 +1,53 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: db-backup
+  namespace: project
+spec:
+  schedule: "0 0 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          containers:
+            - name: db-backup
+              image: db-backup:1.0.0
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: PGHOST
+                  value: postgres-svc
+                - name: PGPORT
+                  value: "5432"
+                - name: PGUSER
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-credentials
+                      key: POSTGRES_USER
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-credentials
+                      key: POSTGRES_PASSWORD
+                - name: PGDATABASE
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-credentials
+                      key: POSTGRES_DB
+                # Not stored in git: created once by hand with
+                # `kubectl create secret generic storage-sa-key --from-file=key.json=key.json`
+                # (see ../README.md).
+                - name: BUCKET_NAME
+                  value: dwk-gke-512012-todo-backup
+                - name: GOOGLE_APPLICATION_CREDENTIALS
+                  value: /var/secrets/google/key.json
+              volumeMounts:
+                - name: storage-sa-key
+                  mountPath: /var/secrets/google
+                  readOnly: true
+          volumes:
+            - name: storage-sa-key
+              secret:
+                secretName: storage-sa-key
+          restartPolicy: OnFailure
