@@ -4,9 +4,9 @@ metadata:
   name: ping-pong-svc
   namespace: exercises
 spec:
-  # NodePort, not LoadBalancer: GKE's Ingress (exercise 3.2) requires a NodePort backend
-  # Service — it doesn't expose NodePort externally itself, the Ingress's load balancer does.
-  type: NodePort
+  # ClusterIP again as of exercise 3.3: unlike Ingress, the Gateway API's HTTPRoute
+  # targets a regular ClusterIP Service directly, no NodePort needed.
+  type: ClusterIP
   selector:
     app: ping-pong
   ports:

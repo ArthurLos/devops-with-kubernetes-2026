@@ -4,8 +4,9 @@ metadata:
   name: log-output-svc
   namespace: exercises
 spec:
-  # NodePort, not ClusterIP: GKE's Ingress (exercise 3.2) requires a NodePort backend Service.
-  type: NodePort
+  # ClusterIP again as of exercise 3.3: unlike Ingress, the Gateway API's HTTPRoute
+  # targets a regular ClusterIP Service directly, no NodePort needed.
+  type: ClusterIP
   selector:
     app: log-output
   ports:

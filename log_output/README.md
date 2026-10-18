@@ -73,19 +73,23 @@ Exposed via the shared Ingress (`../manifests/ingress.yaml`), shared with the `.
 
 `manifests/gke/deployment.yaml` and `manifests/gke/service.yaml` are GKE-specific variants, analogous to `../ping-pong/manifests/gke/` (see that app's README for the full GKE build/deploy/cleanup flow — cluster create, Artifact Registry push, cluster delete). Differences from the local manifests:
 - `gke/deployment.yaml` — images from Google Artifact Registry instead of a locally-imported image.
-- `gke/service.yaml` — `type: NodePort` instead of `ClusterIP`: GKE's Ingress controller requires a NodePort backend Service (it doesn't expose the NodePort externally itself — the Ingress's load balancer does that).
+- `gke/service.yaml` — originally `type: NodePort` for this exercise (GKE's Ingress controller requires a NodePort backend Service, it doesn't expose the NodePort externally itself); changed to `ClusterIP` in exercise 3.3 below. The `3.2` git tag still has the `NodePort` version.
 
-`manifests/configmap.yaml` is reused as-is (nothing cluster-specific in it). The root `../manifests/ingress.yaml` is also reused unchanged — GKE provisions its own `gce` `IngressClass` by default, and the rule definitions (paths, Service names, ports) are identical between clusters; only each Service's `type` differs, which lives in the per-app Service manifests, not the Ingress itself.
+`manifests/configmap.yaml` is reused as-is (nothing cluster-specific in it). Exercise 3.2 reused the root `../manifests/ingress.yaml` unchanged on GKE too (GKE provisions its own `gce` `IngressClass` by default) — as of exercise 3.3 that Ingress has been replaced by a Gateway, see below.
+
+## Exercise 3.3: Gateway API instead of Ingress
+
+`gke/service.yaml` is back to `type: ClusterIP` — the Gateway API's `HTTPRoute` targets a regular ClusterIP Service directly, no NodePort needed (unlike Ingress). The actual routing now lives in `../manifests/gke/gateway.yaml` (shared with `../ping-pong`, since it's one `Gateway` + one `HTTPRoute` with two rules — same shape as the old shared Ingress) — see `../ping-pong/README.md`'s "Exercise 3.3" section for the full explanation and combined deploy flow.
 
 ```bash
-# after the cluster, namespace, images, Secret and gke/ manifests are set up (see ../ping-pong/README.md)
-kubectl apply -f manifests/configmap.yaml
-kubectl apply -f manifests/gke/deployment.yaml
-kubectl apply -f manifests/gke/service.yaml
-kubectl apply -f ../manifests/ingress.yaml
+kubectl apply -f manifests/gke/service.yaml   # ClusterIP now
+kubectl apply -f ../manifests/gke/gateway.yaml
 
-# wait for the Ingress to get an address (can take a few minutes; 404/502 is normal while it provisions)
-kubectl get ingress -n exercises --watch
-curl http://<ingress-address>/status
-curl http://<ingress-address>/pingpong
+# wait for the Gateway to get an address (can take several minutes; 404/502 is normal while it provisions)
+kubectl get gateway my-gateway -n exercises --watch
+curl http://<gateway-address>/status
+curl http://<gateway-address>/pingpong
+
+# the old Ingress is no longer needed once the Gateway works — remove it to avoid paying for two load balancers
+kubectl delete -f ../manifests/ingress.yaml
 ```

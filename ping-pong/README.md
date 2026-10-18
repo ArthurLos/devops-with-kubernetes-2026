@@ -111,13 +111,28 @@ gcloud container clusters delete dwk-cluster --zone=europe-west4-a
 
 ## Exercise 3.2: Ingress instead of a standalone LoadBalancer
 
-`gke/service.yaml` is now `type: NodePort` instead of `LoadBalancer` — GKE's Ingress controller requires a NodePort backend Service (it doesn't expose the NodePort externally itself, the Ingress's load balancer does that). The shared root `../manifests/ingress.yaml` now routes `/pingpong` here, same as it does locally — see `../log_output/README.md`'s "Exercise 3.2" section for the full combined deploy flow (it's identical for both apps, just applied once for the shared Ingress).
+`gke/service.yaml` was `type: NodePort` for this exercise — GKE's Ingress controller requires a NodePort backend Service (it doesn't expose the NodePort externally itself, the Ingress's load balancer does that). The shared root `../manifests/ingress.yaml` routed `/pingpong` here, same as it does locally. As of exercise 3.3 below, the Ingress has been replaced by a Gateway and the Service is `ClusterIP` again — the `3.2` git tag still has the `NodePort` version if you need to see exactly what this exercise looked like.
+
+## Exercise 3.3: Gateway API instead of Ingress
+
+The Gateway API is the next-generation successor to Ingress — same job (routing external HTTP traffic to Services based on path/host rules), but as a more extensible, standardized set of resources (`GatewayClass`, `Gateway`, `HTTPRoute`) instead of the single monolithic `Ingress` kind:
+- **`GatewayClass`** (`gke-l7-global-external-managed` here) — provided by GKE itself, picks which load balancer implementation backs the Gateway. Enabled on the cluster once with `gcloud container clusters update dwk-cluster --zone=europe-west4-a --gateway-api=standard`.
+- **`Gateway`** — defines *where* traffic enters (which ports/protocols to listen on), independent of routing rules.
+- **`HTTPRoute`** — defines the actual routing rules (path matches → backend Service), analogous to an Ingress's `paths` list.
+
+`../manifests/gke/gateway.yaml` defines one shared `Gateway` (`my-gateway`) and one `HTTPRoute` with two rules — `/pingpong` → `ping-pong-svc`, `/status` → `log-output-svc` — the same shape as the old shared `../manifests/ingress.yaml`, just split across two resource kinds. `gke/service.yaml` is back to plain `ClusterIP`: unlike Ingress, an `HTTPRoute` targets a Service directly, no NodePort needed.
 
 ```bash
-kubectl apply -f manifests/gke/service.yaml   # after updating gke/deployment.yaml's image tag and re-applying it
-kubectl apply -f ../manifests/ingress.yaml
+# one-time per cluster
+gcloud container clusters update dwk-cluster --zone=europe-west4-a --gateway-api=standard
 
-# wait for the Ingress to get an address (can take a few minutes; 404/502 is normal while it provisions)
-kubectl get ingress -n exercises --watch
-curl http://<ingress-address>/pingpong
+kubectl apply -f manifests/gke/service.yaml   # ClusterIP now
+kubectl apply -f ../manifests/gke/gateway.yaml
+
+# wait for the Gateway to get an address (can take several minutes; 404/502 is normal while it provisions)
+kubectl get gateway my-gateway -n exercises --watch
+curl http://<gateway-address>/pingpong
+
+# the old Ingress is no longer needed once the Gateway works — remove it to avoid paying for two load balancers
+kubectl delete -f ../manifests/ingress.yaml
 ```
