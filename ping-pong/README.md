@@ -70,3 +70,43 @@ kubectl exec -n exercises postgres-stset-0 -- psql -U pingpong -d pingpong -c "S
 kubectl delete pod -n exercises postgres-stset-0
 curl http://localhost:8081/pingpong   # resumes from the last persisted value, doesn't reset to 0
 ```
+
+## Exercise 3.1: deploying to GKE
+
+`manifests/gke/` holds a GKE-specific variant of the Postgres StatefulSet, the Deployment, and a new `LoadBalancer` Service (exercise 3.1 asks for a `LoadBalancer` instead of the Ingress used locally) — the plain `manifests/*.yaml` files stay as-is for the local k3d cluster. Differences from the local manifests:
+- `gke/postgres.yaml` — no `storageClassName` on the `PersistentVolumeClaim`: GKE automatically provisions a (default) Persistent Disk for an unset storage class, there's no `local-path`-equivalent to point to.
+- `gke/deployment.yaml` — image comes from Google Artifact Registry (`europe-west4-docker.pkg.dev/<project>/dwk-repo/ping-pong:2.0.1`) instead of a locally-imported image, since GKE nodes can't pull from k3d's local image store.
+- `gke/service.yaml` — `type: LoadBalancer` on port 80 instead of the local `ClusterIP` + shared Ingress.
+
+`manifests/postgres-secret.yaml` and the root `manifests/namespace-exercises.yaml` are reused as-is — nothing cluster-specific in either.
+
+```bash
+# one-time: create a GCP project, enable billing, then:
+gcloud services enable container.googleapis.com artifactregistry.googleapis.com
+gcloud artifacts repositories create dwk-repo --repository-format=docker --location=europe-west4
+
+# create the cluster (costs credits/money while it exists — delete when done, see below)
+gcloud container clusters create dwk-cluster --zone=europe-west4-a --cluster-version=1.36 --disk-size=32 --num-nodes=4 --machine-type=e2-small
+gcloud container clusters get-credentials dwk-cluster --zone=europe-west4-a   # if kubectl isn't already pointed at it
+
+# build and push the image (bump the tag/project/repo as needed)
+docker build -t ping-pong:2.0.1 .
+gcloud auth configure-docker europe-west4-docker.pkg.dev
+docker tag ping-pong:2.0.1 europe-west4-docker.pkg.dev/<project-id>/dwk-repo/ping-pong:2.0.1
+docker push europe-west4-docker.pkg.dev/<project-id>/dwk-repo/ping-pong:2.0.1
+
+# deploy (namespace and Secret are the same files used locally)
+kubectl apply -f ../manifests/namespace-exercises.yaml
+kubectl apply -f manifests/postgres-secret.yaml
+kubectl apply -f manifests/gke/postgres.yaml
+kubectl rollout status statefulset/postgres-stset -n exercises
+kubectl apply -f manifests/gke/deployment.yaml
+kubectl apply -f manifests/gke/service.yaml
+
+# wait for an external IP, then test
+kubectl get svc ping-pong-svc -n exercises --watch
+curl http://<external-ip>/pingpong
+
+# delete the cluster when done to stop billing (declarative setup, so resuming later is just re-running the steps above)
+gcloud container clusters delete dwk-cluster --zone=europe-west4-a
+```
