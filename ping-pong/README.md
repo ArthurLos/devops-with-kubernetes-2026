@@ -2,7 +2,7 @@
 
 Responds to `GET /` with `pong <n>` (moved from `/pingpong` in exercise 3.4, see below). The counter lives in memory for speed, and as of exercise 2.7 is persisted to a **Postgres database** (`manifests/postgres.yaml` — a `StatefulSet` with one replica, `postgres-stset`, plus its headless `postgres-svc`), so it survives pod restarts — including Postgres' own restarts, since its data lives on a `PersistentVolumeClaim` dynamically provisioned per-replica via `volumeClaimTemplates` (k3d's built-in `local-path` storage class, no manual `PersistentVolume` needed). This replaced the old file-based `PersistentVolume` from exercise 2.1. As of exercise 2.1 the counter is no longer shared with `log_output` via a volume either — that app now reads the count over HTTP instead (`GET /pings`, plain text, same value as the last `pong` shown).
 
-Shares an Ingress with the `log_output` application on the local k3d cluster (see `../manifests/ingress.yaml` at the repo root, since it spans both apps): `/pingpong` routes here, `/status` goes to `log_output`. **Note:** as of exercise 3.4 the app no longer serves `/pingpong` itself (see below), so this local Ingress route is stale — it was never updated to also rewrite the path, since the local cluster doesn't yet have a Gateway API implementation installed (that's an optional, not-yet-assigned step at the end of the course's cloud chapter). `/` and `/pings` still work locally via `kubectl port-forward` or a direct in-cluster request to `ping-pong-svc`.
+As of chapter 5 ("Continuing the course with k3d"), the local k3d cluster runs with Traefik disabled and [Envoy Gateway](https://gateway.envoyproxy.io/) installed instead, so this app is reachable the same way it is on GKE: via a shared `Gateway`/`HTTPRoute` (`../manifests/gateway.yaml`, `gatewayClassName: eg`) with `log_output`, including the same `URLRewrite` filter that rewrites `/pingpong` → `/` (needed since exercise 3.4 moved the app's real route to `/`). The old root `../manifests/ingress.yaml` (Traefik-based) is no longer used locally — kept only for historical reference/the exercise 3.1–3.2 git tags.
 
 Configuration is entirely via environment variables (no hardcoded ports/URLs in the source, consistent with exercise 2.6's project-wide rule):
 - `PORT` (defaults to `3000`).
@@ -36,12 +36,12 @@ k3d cluster list
 # load it into your local cluster
 k3d image import ping-pong:2.2.0 -c <cluster-name>
 
-# the exercises namespace, Postgres credentials/StatefulSet/Service and shared Ingress must exist first (repo root for the namespace/Ingress)
+# the exercises namespace, Postgres credentials/StatefulSet/Service and shared Gateway must exist first (repo root for the namespace/Gateway)
 kubectl apply -f ../manifests/namespace-exercises.yaml
 kubectl apply -f manifests/postgres-secret.yaml
 kubectl apply -f manifests/postgres.yaml
 kubectl rollout status statefulset/postgres-stset -n exercises
-kubectl apply -f ../manifests/ingress.yaml
+kubectl apply -f ../manifests/gateway.yaml
 
 # update the image tag in manifests/deployment.yaml to match, then apply
 kubectl apply -f manifests/deployment.yaml
@@ -54,9 +54,9 @@ kubectl logs -f <pod-name> -n exercises
 
 ## Access it locally
 
-Exposed via `log_output`'s Ingress on path `/pingpong`. Reachable on whichever host port your cluster maps to the ingress controller's port 80 (e.g. `http://localhost:8081/pingpong`) — check your cluster's port mapping.
+Exposed via the shared `Gateway` (`../manifests/gateway.yaml`) on path `/pingpong`, rewritten to `/`. Reachable on whichever host port your k3d cluster maps to the load balancer's port 80 (e.g. `http://localhost:8081/pingpong`) — check your cluster's port mapping.
 
-`/pings` is cluster-internal only (no Ingress route) — it's consumed by `log_output`'s reader via `http://ping-pong-svc:3000/pings`.
+`/pings` is cluster-internal only (no route exposes it) — it's consumed by `log_output`'s reader via `http://ping-pong-svc:3000/pings`.
 
 ## Note on the database
 
@@ -143,7 +143,7 @@ The app now responds on `/` instead of `/pingpong` — rather than baking the cl
 
 A side effect: since the old `/` health-check stub and the real `pingpong` logic are now the same route, GKE's health check (also always `GET /`) exercises the real counter logic directly — no separate dummy route needed anymore (see the note above).
 
-**Local k3d note:** this exercise is GKE/Gateway-specific. The local Ingress (`../manifests/ingress.yaml`, Traefik-backed) has no rewrite rule and still forwards the literal `/pingpong` path, which now 404s against this app — that's expected, not a bug, since local cluster has no Gateway API implementation installed (see the course's separate, not-yet-assigned "Using the Gateway API in the k3d cluster" section for how that would be added later with Envoy Gateway). Locally, use `/` directly (e.g. via `kubectl port-forward svc/ping-pong-svc -n exercises 3000:3000` or an in-cluster request) instead of going through the Ingress.
+**Local k3d note:** this was GKE/Gateway-specific when written. As of chapter 5, the local cluster also runs Envoy Gateway (Traefik disabled, see `../manifests/gateway.yaml`), with the exact same `URLRewrite` rule — so `http://localhost:8081/pingpong` works locally too now, same as on GKE.
 
 ```bash
 # after bumping gke/deployment.yaml's image tag and re-applying it

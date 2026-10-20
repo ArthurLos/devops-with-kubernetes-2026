@@ -1,6 +1,6 @@
 # todo-app
 
-Web server for the course project — a server-side rendered (SSR) app, not a SPA. `GET /` renders a page showing a random picture from [Lorem Picsum](https://picsum.photos), the current todos (fetched server-side from `../todo-backend`), and a form for adding new ones (max 140 characters). The form POSTs directly to `/todos`, which the shared Ingress routes to `todo-backend`, not to this app — `todo-backend` redirects back to `/` afterwards so the browser sees the updated list.
+Web server for the course project — a server-side rendered (SSR) app, not a SPA. `GET /` renders a page showing a random picture from [Lorem Picsum](https://picsum.photos), the current todos (fetched server-side from `../todo-backend`), and a form for adding new ones (max 140 characters). The form POSTs directly to `/todos`, which the shared `Gateway`/`HTTPRoute` (`../manifests/gateway.yaml`) routes to `todo-backend`, not to this app — `todo-backend` redirects back to `/` afterwards so the browser sees the updated list.
 
 The picture is cached on a `PersistentVolume` (`../../manifests/todo-app-persistentvolume.yaml` + `todo-app-persistentvolumeclaim.yaml`) for 10 minutes — `GET /image` serves the cached file and only fetches a new one from Picsum once it's older than that (or missing). This means the picture survives pod restarts without hitting the external API again, and only refreshes lazily on the next request after the cache expires, not on a background timer.
 
@@ -44,7 +44,7 @@ kubectl apply -f ../../manifests/todo-app-persistentvolumeclaim.yaml
 # update the image tag in manifests/deployment.yaml to match, then apply
 kubectl apply -f manifests/deployment.yaml
 kubectl apply -f manifests/service.yaml
-kubectl apply -f manifests/ingress.yaml
+kubectl apply -f ../manifests/gateway.yaml
 kubectl rollout status deployment/todo-app -n project
 
 # confirm it's running
@@ -54,7 +54,7 @@ kubectl logs -f <pod-name> -n project
 
 ## Access it locally
 
-Exposed via Ingress (`manifests/ingress.yaml`), routed through the cluster's Traefik ingress controller (service is `ClusterIP`, no NodePort anymore as of exercise 1.8). Reachable on whichever host port your cluster maps to the ingress controller's port 80 (e.g. a k3d cluster created with `-p "8081:80@loadbalancer"` maps it to `http://localhost:8081`) — check your cluster's port mapping.
+As of chapter 5, exposed via the shared `Gateway`/`HTTPRoute` (`../manifests/gateway.yaml`, Envoy Gateway — the cluster's Traefik ingress controller is disabled as of this chapter, so the old `manifests/ingress.yaml` is no longer used locally). Service is still plain `ClusterIP`. Reachable on whichever host port your cluster maps to the load balancer's port 80 (e.g. a k3d cluster created with `-p "8081:80@loadbalancer"` maps it to `http://localhost:8081`) — check your cluster's port mapping.
 
 ## Troubleshooting: PVC stuck Pending
 

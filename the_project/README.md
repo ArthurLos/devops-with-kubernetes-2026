@@ -180,4 +180,4 @@ curl http://<ingress-address>/todos
 
 ## Local development
 
-The local k3d cluster is unaffected by any of the above — it still uses the plain `kubectl apply -f <app>/manifests/...` workflow documented in each subfolder's own README, with its own `hostPath` PersistentVolume and `ClusterIP` Services.
+The local k3d cluster doesn't use Kustomize or any of the GKE-specific manifests above — it uses the plain `kubectl apply -f <app>/manifests/...` workflow documented in each subfolder's own README, with its own `hostPath` PersistentVolume and `ClusterIP` Services. As of chapter 5, routing locally is via `manifests/gateway.yaml` (Envoy Gateway, Traefik is disabled on this cluster) rather than `todo-app/manifests/ingress.yaml` — see `todo-app/README.md`.

@@ -41,10 +41,10 @@ k3d cluster list
 # load them into your local cluster
 k3d image import log-output-writer:1.1.0 log-output-reader:1.4.0 -c <cluster-name>
 
-# the exercises namespace, the ConfigMap and the shared Ingress must exist first (repo root, spans multiple apps)
+# the exercises namespace, the ConfigMap and the shared Gateway must exist first (repo root, spans multiple apps)
 kubectl apply -f ../manifests/namespace-exercises.yaml
 kubectl apply -f manifests/configmap.yaml
-kubectl apply -f ../manifests/ingress.yaml
+kubectl apply -f ../manifests/gateway.yaml
 
 # update the image tags in manifests/deployment.yaml to match, then apply
 kubectl apply -f manifests/deployment.yaml
@@ -63,11 +63,11 @@ Note: `writer` won't print anything to `kubectl logs` by design — it writes to
 
 ## Access it locally
 
-Exposed via the shared Ingress (`../manifests/ingress.yaml`), shared with the `../ping-pong` application:
+As of chapter 5, exposed via the shared `Gateway`/`HTTPRoute` (`../manifests/gateway.yaml`, `gatewayClassName: eg`, Envoy Gateway — Traefik is disabled on this cluster), shared with the `../ping-pong` application:
 - `/status` → this app (reader)
-- `/pingpong` → ping-pong
+- `/pingpong` → ping-pong (rewritten to `/`)
 
-`the_project`'s own Ingress separately owns `/`, so there's no overlap between the two Ingress resources. Reachable on whichever host port your cluster maps to the ingress controller's port 80 (e.g. `http://localhost:8081/status`) — check your cluster's port mapping.
+`the_project`'s own `HTTPRoute` (`../the_project/manifests/gateway.yaml`) separately owns `/` and `/todos`, attached to the same Gateway — no overlap between the two. Reachable on whichever host port your k3d cluster maps to the load balancer's port 80 (e.g. `http://localhost:8081/status`) — check your cluster's port mapping.
 
 ## Exercise 3.2: deploying to GKE with Ingress
 

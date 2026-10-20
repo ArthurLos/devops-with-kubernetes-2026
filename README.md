@@ -4,9 +4,11 @@ Submissions for the DevOps with Kubernetes course.
 
 Structure:
 - `log_output/` — the logging exercise project (early exercises)
-- `ping-pong/` — simple counter app, sharing an Ingress with `log_output`
+- `ping-pong/` — simple counter app, sharing a Gateway with `log_output`
 - `the_project/` — the main course project, growing over time (contains one subfolder per microservice, e.g. `todo-app/`). As of exercise 3.5, deployed to GKE as one unit via Kustomize (`the_project/kustomization.yaml`) — see `the_project/README.md`.
-- `manifests/` — manifests that are either shared across apps or inherently cluster/admin-level (Namespaces, PersistentVolumes). Includes the two Namespaces (see below), the Ingress shared by `log_output` and `ping-pong`, and `todo-app`'s own PersistentVolume/Claim for its cached picture (not app-specific resources, so kept separate from `todo-app`'s own `manifests/` folder even though only it uses this PV). `ping-pong`'s counter moved from its own PV to a Postgres `StatefulSet` in exercise 2.7 — see `ping-pong/manifests/`.
+- `manifests/` — manifests that are either shared across apps or inherently cluster/admin-level (Namespaces, PersistentVolumes). Includes the two Namespaces (see below), the Gateway/HTTPRoute shared by `log_output` and `ping-pong` (`gateway.yaml`, see note below), and `todo-app`'s own PersistentVolume/Claim for its cached picture (not app-specific resources, so kept separate from `todo-app`'s own `manifests/` folder even though only it uses this PV). `ping-pong`'s counter moved from its own PV to a Postgres `StatefulSet` in exercise 2.7 — see `ping-pong/manifests/`.
+
+**Local cluster note (chapter 5):** the local k3d cluster now runs with Traefik disabled and [Envoy Gateway](https://gateway.envoyproxy.io/) installed instead (`kubectl apply -f https://github.com/envoyproxy/gateway/releases/latest/download/install.yaml`, plus a `GatewayClass` named `eg`), since several apps (`ping-pong`) rely on Gateway API's `URLRewrite` filter, which plain Ingress has no equivalent for. Routing locally is now via `manifests/gateway.yaml` (one shared `Gateway` for `log_output`+`ping-pong`) and `the_project/manifests/gateway.yaml` (an `HTTPRoute` for `the_project`, attached to that same Gateway — k3d's `ServiceLB` can only bind one Gateway's `LoadBalancer` Service to host port 80). The old `manifests/ingress.yaml` and `the_project/todo-app/manifests/ingress.yaml` are no longer used locally, kept only for historical reference and the exercise tags that predate this change.
 
 Namespaces:
 - `exercises` (since 2.3) — `log_output` and `ping-pong`, i.e. everything from the standalone course exercises (outside the project). Used for all future exercises outside `the_project`.

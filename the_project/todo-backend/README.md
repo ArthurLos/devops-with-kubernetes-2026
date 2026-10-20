@@ -56,7 +56,7 @@ kubectl logs -f <pod-name> -n project
 
 ## Access it locally
 
-- `GET /todos` is exposed externally via `../todo-app`'s shared Ingress (`../todo-app/manifests/ingress.yaml`, path `/todos`), e.g. `http://localhost:8081/todos` — check your cluster's port mapping.
+- `GET /todos` is exposed externally via the shared `Gateway`/`HTTPRoute` (`../manifests/gateway.yaml`, path `/todos`), e.g. `http://localhost:8081/todos` — check your cluster's port mapping.
 - Cluster-internal address: `http://todo-backend-svc:2345/todos`.
 
 ## Testing
