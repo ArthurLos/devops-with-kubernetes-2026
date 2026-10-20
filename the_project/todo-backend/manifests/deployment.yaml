@@ -15,8 +15,14 @@ spec:
     spec:
       containers:
         - name: todo-backend
-          image: todo-backend:2.2.0
+          image: todo-backend:2.3.0
           imagePullPolicy: IfNotPresent
+          readinessProbe:
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            httpGet:
+              path: /healthz
+              port: 3000
           resources:
             requests:
               cpu: 20m

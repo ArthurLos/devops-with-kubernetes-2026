@@ -26,6 +26,11 @@ const SEED_TODOS = [
   'Configure persistent volumes',
 ];
 
+// Set once the todos table has been created/seeded — gates /healthz (exercise 4.2)
+// alongside the plain connectivity check, so readiness doesn't pass before startup
+// has finished.
+let dbInitialized = false;
+
 async function ensureTable() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS todos (
@@ -40,12 +45,28 @@ async function ensureTable() {
       await pool.query('INSERT INTO todos (text) VALUES ($1)', [text]);
     }
   }
+  dbInitialized = true;
 }
 
 // GKE's Ingress health check always GETs / on the backend Service, regardless of
 // which path it's actually routed under (here /todos) — it must return 200.
 app.get('/', (req, res) => {
   res.sendStatus(200);
+});
+
+// Exercise 4.2: ready once we have a working connection to Postgres — same pattern
+// as ping-pong's /healthz (exercise 4.1). A cheap SELECT run on every probe, rather
+// than re-running ensureTable() each time.
+app.get('/healthz', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    if (!dbInitialized) {
+      throw new Error('todos table not initialized yet');
+    }
+    res.status(200).json({ status: 'ok' });
+  } catch (err) {
+    res.status(500).json({ status: 'unhealthy', error: err.message });
+  }
 });
 
 app.get('/todos', async (req, res) => {
@@ -79,8 +100,10 @@ app.post('/todos', async (req, res) => {
   res.redirect('/');
 });
 
-async function start() {
-  // Postgres (the StatefulSet) might not be ready yet when this app starts, keep retrying.
+// The server starts listening immediately — the readinessProbe (not a startup-blocking
+// retry loop) is what gates traffic until Postgres is reachable (exercise 4.2, same
+// reasoning as ping-pong's exercise 4.1).
+(async () => {
   for (;;) {
     try {
       await ensureTable();
@@ -90,10 +113,8 @@ async function start() {
       await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
     }
   }
+})();
 
-  app.listen(PORT, () => {
-    console.log(`Server started in port ${PORT}`);
-  });
-}
-
-start();
+app.listen(PORT, () => {
+  console.log(`Server started in port ${PORT}`);
+});

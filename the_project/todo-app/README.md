@@ -26,13 +26,13 @@ npm start
 
 ```bash
 # build the image (bump the tag when the code changes)
-docker build -t todo-app:1.5.0 .
+docker build -t todo-app:1.6.1 .
 
 # get cluster name if you don't know it
 k3d cluster list
 
 # load it into your local cluster
-k3d image import todo-app:1.5.0 -c <cluster-name>
+k3d image import todo-app:1.6.1 -c <cluster-name>
 
 # the project namespace, ConfigMap and PersistentVolume/Claim must exist first (repo root, admin-managed resources),
 # and ../todo-backend must be deployed too (this app fetches/posts todos from it)
@@ -67,6 +67,22 @@ kubectl apply -f ../../manifests/todo-app-persistentvolumeclaim.yaml
 ```
 
 (The PV itself has no namespace — it's a cluster-scoped resource — only the PVC does.)
+
+## Exercise 4.2: probes, and a button to break the app
+
+Two separate endpoints, two separate concerns:
+- **`GET /ready`** (readiness) — checks this app can actually reach `../todo-backend`. Cascades naturally from `todo-backend`'s own readiness (which checks its Postgres connection, same pattern as `../../ping-pong`'s exercise 4.1): while `todo-backend` is `0/1`, `todo-backend-svc` has no endpoints, so `/ready` fails here too — no explicit dependency wiring needed.
+- **`GET /healthz`** (liveness) — a plain `isHealthy` boolean, toggled by the **"break the app" button** on the page (`POST /break`). Deliberately *not* the same check as `/ready`: a livenessProbe that depends on another service is an anti-pattern (restarting this pod can't fix `todo-backend` being down), so it only reflects this app's own, self-contained state.
+
+Pressing the button sets `isHealthy = false`; `GET /` then renders a "System Failure" page (`503`) instead of the normal one, and `/healthz` starts failing. The `livenessProbe` in `manifests/deployment.yaml` picks that up after a few failed checks and restarts the container — since `isHealthy` is just in-memory state, the fresh process starts back at `true`, so the app is healthy again with no manual intervention.
+
+Tested: broke the app (`curl -X POST .../break`), confirmed `GET /` returned `503` with the failure page, watched `kubectl get pods -n project -l app=todo-app` until `RESTARTS` incremented (the events showed `Liveness probe failed ... will be restarted`), then confirmed `GET /` was back to `200` with the normal page straight after.
+
+Separately tested the readiness/database requirement the same way as `../../ping-pong`'s exercise 4.1: scaled `postgres-stset` to 0 replicas, deleted and re-applied both `todo-backend` and `todo-app`'s Deployments, confirmed both came up `0/1`, then scaled Postgres back to 1 replica and watched both flip to `1/1` automatically within seconds.
+
+The failure page also sets `<meta http-equiv="refresh" content="5">`, so a visitor who's left the page open sees it recover on its own, without manually reloading, once the pod is healthy again.
+
+**Known, expected glitch:** with only one replica and no connection draining around a liveness-triggered restart (unlike a rolling update, Kubernetes just kills the container), a request that happens to land in the exact instant the old container is killed can get Envoy's own `upstream connect error or disconnect/reset before headers` page for that one request, instead of this app's `503` page. This only affects whichever single request (or auto-refresh) hits that split-second window — traffic is back to normal (either the failure page or the recovered app) immediately after. Not something exercise 4.2 asks to eliminate, and not worth adding complexity for on a single-replica app.
 
 ## Testing the image cache
 

@@ -148,6 +148,15 @@ Verified by creating a new todo (`POST /todos`) with a distinctive marker text a
 
 ![GKE Logs Explorer showing the log line for a newly created todo](docs/gke-logs-new-todo.png)
 
+## Exercise 4.2: probes and a "break the app" button
+
+Chapter 5's readiness/liveness probe pattern (introduced for `../ping-pong`/`../log_output` in exercise 4.1) now applies to the project too:
+
+- **`todo-backend`** gets a `readinessProbe` on a new `GET /healthz`, checking its Postgres connection — see `todo-backend/README.md`.
+- **`todo-app`** gets a `readinessProbe` on a new `GET /ready` (checks it can reach `todo-backend`, cascading from the above) **and** a `livenessProbe` on a new `GET /healthz` (a self-contained `isHealthy` flag, deliberately independent of any other service) — see `todo-app/README.md` for the full picture, including the "break the app" button that flips that flag and the restart-then-recover test.
+
+Tested exactly like exercise 4.1: scaling `postgres-stset` to 0 replicas and redeploying both apps brought them up `0/1`; scaling it back brought both to `1/1` automatically. Breaking `todo-app` via its button triggered an automatic liveness-restart and recovery, confirmed via `kubectl get pods --watch` and the `RESTARTS` counter.
+
 ## Deploying to GKE (manually)
 
 ```bash

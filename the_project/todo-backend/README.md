@@ -13,7 +13,7 @@ Configuration is entirely via environment variables (no hardcoded ports/URLs in 
 - `PORT` (defaults to `3000`).
 - `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` — read automatically by the `pg` client library; in the cluster these are set in `manifests/deployment.yaml` (`PGHOST`/`PGPORT` directly, the rest via `secretKeyRef` into `manifests/postgres-secret.yaml`'s `postgres-credentials` Secret, which Postgres itself also consumes via `envFrom`).
 
-On startup the app retries connecting to Postgres (every 2s) until it succeeds, since the database StatefulSet might not be ready yet when this Pod starts. It also registers a `pool.on('error', ...)` handler: without one, an unexpected connection drop (e.g. the Postgres pod restarting) crashes the whole Node process instead of just failing the in-flight query.
+On startup the app retries connecting to Postgres (every 2s) in the background until it succeeds, since the database StatefulSet might not be ready yet when this Pod starts. As of exercise 4.2, this retry loop no longer blocks `app.listen()` — the server starts immediately, and a `readinessProbe` (`GET /healthz`, checks Postgres connectivity on every call, same pattern as `../../ping-pong`'s exercise 4.1) is what gates traffic until the database is reachable. It also registers a `pool.on('error', ...)` handler: without one, an unexpected connection drop (e.g. the Postgres pod restarting) crashes the whole Node process instead of just failing the in-flight query.
 
 As of exercise 2.4, this app runs in its own `project` namespace (see `../../manifests/namespace-project.yaml`), together with `../todo-app` — kept separate from the `exercises` namespace used by the standalone course exercises.
 
@@ -31,13 +31,13 @@ npm start
 
 ```bash
 # build the image (bump the tag when the code changes)
-docker build -t todo-backend:2.2.0 .
+docker build -t todo-backend:2.3.0 .
 
 # get cluster name if you don't know it
 k3d cluster list
 
 # load it into your local cluster
-k3d image import todo-backend:2.2.0 -c <cluster-name>
+k3d image import todo-backend:2.3.0 -c <cluster-name>
 
 # the project namespace, Postgres credentials/StatefulSet/Service must exist first (repo root for the namespace)
 kubectl apply -f ../../manifests/namespace-project.yaml
@@ -93,3 +93,9 @@ curl http://localhost:8081/todos   # list is still there, not reset to the seed 
 ## Deploying to GKE
 
 As of exercise 3.5, the whole project (this app, `../todo-app` and `../wiki-reminder`) is deployed to GKE as one unit via Kustomize — see `../README.md` and `../kustomization.yaml`, not this file's "Build and deploy" section (that one's for the local k3d cluster only). This app's own GKE-specific manifest is `manifests/gke/service.yaml` (`NodePort` instead of `ClusterIP`, same reasoning as `../../ping-pong`'s and `../../log_output`'s exercise 3.2 Services).
+
+## Exercise 4.2: readiness probe
+
+Same pattern as `../../ping-pong`'s exercise 4.1 `GET /healthz`: a cheap `SELECT 1` on every probe call (not `ensureTable()`, which would be unnecessary to re-run repeatedly), plus a one-time "table initialized" flag so readiness doesn't pass before the `todos` table/seed data exists. `manifests/deployment.yaml` wires this up as a `readinessProbe` (`initialDelaySeconds: 5`, `periodSeconds: 5`).
+
+Tested together with `../todo-app`'s exercise 4.2 test (see that README): scaling `postgres-stset` to 0 replicas and re-applying both Deployments brought both up `0/1`; scaling it back to 1 replica brought both to `1/1` within seconds, no manual intervention.
