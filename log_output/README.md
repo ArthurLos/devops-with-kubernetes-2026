@@ -15,6 +15,8 @@ The reader's port is configurable via the `PORT` environment variable (defaults 
 
 As of exercise 3.2, the reader also responds `200` on `GET /` — GKE's Ingress health-checks a backend Service at `/` regardless of which path it's actually routed under (`/status` here), so without this the Ingress would never mark the backend healthy.
 
+As of exercise 4.1, the reader also has a `GET /healthz`, separate from the stub above: it actually calls `../ping-pong` (the same `PINGPONG_URL` used by `/status`) and returns `200` only if that succeeds. A `readinessProbe` in `manifests/deployment.yaml`/`manifests/gke/deployment.yaml` uses this to report the reader as not-ready whenever it can't currently reach Ping-pong — see "Exercise 4.1" below.
+
 As of exercise 2.5, a `ConfigMap` (`manifests/configmap.yaml`, `log-output-config`) provides `information.txt` (mounted as a volume at `/usr/src/app/config/information.txt`, path configurable via `INFO_FILE_PATH`) and the `MESSAGE` env variable, both read by the reader and printed at the top of `/status`.
 
 As of exercise 2.3, this app runs in the `exercises` namespace (see `../manifests/namespace-exercises.yaml`), together with `../ping-pong` — every exercise outside `the_project` lives there from now on.
@@ -33,13 +35,13 @@ cd reader && FILE_PATH=/tmp/status.txt npm install && npm start
 ```bash
 # build both images (bump tags when the code changes)
 docker build -t log-output-writer:1.1.0 writer/
-docker build -t log-output-reader:1.4.0 reader/
+docker build -t log-output-reader:1.5.0 reader/
 
 # get cluster name if you don't know it
 k3d cluster list
 
 # load them into your local cluster
-k3d image import log-output-writer:1.1.0 log-output-reader:1.4.0 -c <cluster-name>
+k3d image import log-output-writer:1.1.0 log-output-reader:1.5.0 -c <cluster-name>
 
 # the exercises namespace, the ConfigMap and the shared Gateway must exist first (repo root, spans multiple apps)
 kubectl apply -f ../manifests/namespace-exercises.yaml
@@ -93,3 +95,9 @@ curl http://<gateway-address>/pingpong
 # the old Ingress is no longer needed once the Gateway works — remove it to avoid paying for two load balancers
 kubectl delete -f ../manifests/ingress.yaml
 ```
+
+## Exercise 4.1: readiness probe
+
+The reader is ready once it can actually reach `../ping-pong` — `GET /healthz` calls `PINGPONG_URL` and returns `500` if that fails, `200` otherwise. `manifests/deployment.yaml`/`manifests/gke/deployment.yaml` wire this up as a `readinessProbe` (`initialDelaySeconds: 5`, `periodSeconds: 5`) on the `reader` container only — `writer` has no HTTP server and gets no probe.
+
+This cascades naturally from Ping-pong's own readiness (exercise 4.1 in `../ping-pong/README.md`): a Service only sends traffic to Ready pods, so while `ping-pong`'s Pod is `0/1` (Postgres unavailable), `ping-pong-svc` has zero endpoints, `PINGPONG_URL` fails to connect, and this reader correctly drops to not-ready too — no explicit dependency wiring needed, just two independent readiness probes composing through the Service layer. Tested together with `../ping-pong`'s test (see that README): scaling Postgres to 0 replicas drops both to not-ready, scaling it back to 1 brings both back within a few seconds.

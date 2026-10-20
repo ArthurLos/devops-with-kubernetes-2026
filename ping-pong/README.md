@@ -8,7 +8,7 @@ Configuration is entirely via environment variables (no hardcoded ports/URLs in 
 - `PORT` (defaults to `3000`).
 - `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` — read automatically by the `pg` client library; in the cluster these are set in `manifests/deployment.yaml` (`PGHOST`/`PGPORT` directly, the rest via `secretKeyRef` into `manifests/postgres-secret.yaml`'s `postgres-credentials` Secret, which Postgres itself also consumes via `envFrom`).
 
-On startup the app retries connecting to Postgres (every 2s) until it succeeds, since the database StatefulSet might not be ready yet when this Pod starts — see the hint in exercise 2.7. It also registers a `pool.on('error', ...)` handler: without one, an unexpected connection drop (e.g. the Postgres pod restarting) crashes the whole Node process instead of just failing the in-flight query.
+On startup the app retries connecting to Postgres (every 2s) in the background until it succeeds, since the database StatefulSet might not be ready yet when this Pod starts — see the hint in exercise 2.7. As of exercise 4.1, this retry loop no longer blocks `app.listen()`: the server starts immediately (the Pod shows `Running`), and a `readinessProbe` (`GET /healthz`, checks Postgres connectivity on every call) is what actually gates traffic until the database is reachable — so the Pod is correctly observable as `0/1` Ready, not simply absent, while Postgres is unavailable. It also registers a `pool.on('error', ...)` handler: without one, an unexpected connection drop (e.g. the Postgres pod restarting) crashes the whole Node process instead of just failing the in-flight query.
 
 As of exercise 3.2, the app also needed to respond `200` on `GET /` for GKE's Ingress health check (which always checks `/`, regardless of which path it's actually routed under). As of exercise 3.4, `/` *is* the real `pingpong` endpoint (see below), so that requirement is satisfied automatically — no separate stub route needed anymore.
 
@@ -28,13 +28,13 @@ npm start
 
 ```bash
 # build the image (bump the tag when the code changes)
-docker build -t ping-pong:2.2.0 .
+docker build -t ping-pong:2.3.0 .
 
 # get cluster name if you don't know it
 k3d cluster list
 
 # load it into your local cluster
-k3d image import ping-pong:2.2.0 -c <cluster-name>
+k3d image import ping-pong:2.3.0 -c <cluster-name>
 
 # the exercises namespace, Postgres credentials/StatefulSet/Service and shared Gateway must exist first (repo root for the namespace/Gateway)
 kubectl apply -f ../manifests/namespace-exercises.yaml
@@ -92,10 +92,10 @@ gcloud container clusters create dwk-cluster --zone=europe-west4-a --cluster-ver
 gcloud container clusters get-credentials dwk-cluster --zone=europe-west4-a   # if kubectl isn't already pointed at it
 
 # build and push the image (bump the tag/project/repo as needed)
-docker build -t ping-pong:2.2.0 .
+docker build -t ping-pong:2.3.0 .
 gcloud auth configure-docker europe-west4-docker.pkg.dev
-docker tag ping-pong:2.2.0 europe-west4-docker.pkg.dev/<project-id>/dwk-repo/ping-pong:2.2.0
-docker push europe-west4-docker.pkg.dev/<project-id>/dwk-repo/ping-pong:2.2.0
+docker tag ping-pong:2.3.0 europe-west4-docker.pkg.dev/<project-id>/dwk-repo/ping-pong:2.3.0
+docker push europe-west4-docker.pkg.dev/<project-id>/dwk-repo/ping-pong:2.3.0
 
 # deploy (namespace and Secret are the same files used locally)
 kubectl apply -f ../manifests/namespace-exercises.yaml
@@ -150,3 +150,9 @@ A side effect: since the old `/` health-check stub and the real `pingpong` logic
 kubectl apply -f ../manifests/gke/gateway.yaml   # picks up the new URLRewrite filter
 curl http://<gateway-address>/pingpong           # now rewritten to / before reaching the app
 ```
+
+## Exercise 4.1: readiness probe
+
+`GET /healthz` reports readiness based on Postgres connectivity: a cheap `SELECT 1` on every call (not `ensureTable()`, which would be unsafe to call repeatedly — it reloads `lastShown`/`nextValue` from the database on every call, which would clobber the in-memory counter state between requests), plus a check that the one-time startup table/state load has finished. `manifests/deployment.yaml` and `manifests/gke/deployment.yaml` wire this up as a `readinessProbe` (`initialDelaySeconds: 5`, `periodSeconds: 5`).
+
+Tested per the exercise instructions: scaled `postgres-stset` to 0 replicas, then deleted and re-applied the Deployment. `kubectl get pods` showed `ping-pong` at `0/1` `Running` (not absent — the server starts regardless of Postgres) while `../log_output`'s reader also dropped to not-ready (its own readiness probe depends on reaching `ping-pong`, see that app's README). Scaling Postgres back to 1 replica flipped both back to ready automatically within a few seconds, with no manual intervention.

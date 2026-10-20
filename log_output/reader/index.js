@@ -14,6 +14,20 @@ app.get('/', (req, res) => {
   res.sendStatus(200);
 });
 
+// Exercise 4.1: ready once this reader can actually receive data from Ping-pong
+// (not just once the process is up) — distinct from the GKE health-check stub above.
+app.get('/healthz', async (req, res) => {
+  try {
+    const response = await fetch(PINGPONG_URL);
+    if (!response.ok) {
+      throw new Error(`ping-pong responded with ${response.status}`);
+    }
+    res.status(200).json({ status: 'ok' });
+  } catch (err) {
+    res.status(500).json({ status: 'unhealthy', error: err.message });
+  }
+});
+
 app.get('/status', async (req, res) => {
   let status = 'No status written yet.';
   try {
