@@ -1,0 +1,79 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: ping-pong
+  namespace: exercises
+spec:
+  # 2 replicas, not 1: a canary "50% weight" step is meaningless with a single replica
+  # (there's no partial state to gate with the analysis in between).
+  replicas: 2
+  strategy:
+    canary:
+      steps:
+        - setWeight: 50
+        - analysis:
+            templates:
+              - templateName: cpu-usage-rate
+        - setWeight: 100
+  selector:
+    matchLabels:
+      app: ping-pong
+  template:
+    metadata:
+      labels:
+        app: ping-pong
+    spec:
+      containers:
+        - name: ping-pong
+          image: ping-pong:2.3.0
+          imagePullPolicy: IfNotPresent
+          readinessProbe:
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            httpGet:
+              path: /healthz
+              port: 3000
+          env:
+            - name: PORT
+              value: "3000"
+            - name: PGHOST
+              value: postgres-svc
+            - name: PGPORT
+              value: "5432"
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_USER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_PASSWORD
+            - name: PGDATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_DB
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: cpu-usage-rate
+  namespace: exercises
+spec:
+  metrics:
+    - name: cpu-usage-rate
+      # Let a little real data accumulate under the new version before judging it.
+      initialDelay: 30s
+      interval: 30s
+      count: 3
+      # Hardcoded threshold (cores) — see ../README.md for how this value was chosen
+      # and verified (both that it lets a normal update through, and that too low a
+      # value correctly blocks one).
+      successCondition: result < 0.5
+      provider:
+        prometheus:
+          address: http://prom-prometheus-server.monitoring.svc.cluster.local
+          query: |
+            scalar(sum(rate(container_cpu_usage_seconds_total{namespace="exercises"}[5m])))

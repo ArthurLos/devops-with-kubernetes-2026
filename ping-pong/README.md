@@ -153,6 +153,71 @@ curl http://<gateway-address>/pingpong           # now rewritten to / before rea
 
 ## Exercise 4.1: readiness probe
 
-`GET /healthz` reports readiness based on Postgres connectivity: a cheap `SELECT 1` on every call (not `ensureTable()`, which would be unsafe to call repeatedly — it reloads `lastShown`/`nextValue` from the database on every call, which would clobber the in-memory counter state between requests), plus a check that the one-time startup table/state load has finished. `manifests/deployment.yaml` and `manifests/gke/deployment.yaml` wire this up as a `readinessProbe` (`initialDelaySeconds: 5`, `periodSeconds: 5`).
+`GET /healthz` reports readiness based on Postgres connectivity: a cheap `SELECT 1` on every call (not `ensureTable()`, which would be unsafe to call repeatedly — it reloads `lastShown`/`nextValue` from the database on every call, which would clobber the in-memory counter state between requests), plus a check that the one-time startup table/state load has finished. The local `readinessProbe` lived in `manifests/deployment.yaml` here (`initialDelaySeconds: 5`, `periodSeconds: 5`); as of exercise 4.4 that file was replaced by `manifests/rollout.yaml` (see below), which carries the same probe forward. `manifests/gke/deployment.yaml` (still a plain `Deployment`, GKE wasn't touched by 4.4) has the identical probe.
 
 Tested per the exercise instructions: scaled `postgres-stset` to 0 replicas, then deleted and re-applied the Deployment. `kubectl get pods` showed `ping-pong` at `0/1` `Running` (not absent — the server starts regardless of Postgres) while `../log_output`'s reader also dropped to not-ready (its own readiness probe depends on reaching `ping-pong`, see that app's README). Scaling Postgres back to 1 replica flipped both back to ready automatically within a few seconds, with no manual intervention.
+
+## Exercise 4.4: canary analysis on CPU usage
+
+`manifests/deployment.yaml` is replaced by `manifests/rollout.yaml` — a [Rollout](https://argo-rollouts.readthedocs.io/en/stable/features/specification/) (Argo Rollouts' `Deployment` equivalent) using a `canary` strategy, plus an `AnalysisTemplate` that gates the rollout on cluster-wide CPU usage instead of just probes:
+
+```yaml
+strategy:
+  canary:
+    steps:
+      - setWeight: 50
+      - analysis:
+          templates:
+            - templateName: cpu-usage-rate
+      - setWeight: 100
+```
+
+`replicas` was also bumped from `1` to `2`: a canary `setWeight: 50` step is meaningless with a single replica (there's no partial state — it's either 0% or 100% canary), so a real canary rollout needs at least 2 to actually run half-old/half-new in between.
+
+The `AnalysisTemplate` (`cpu-usage-rate`) queries Prometheus for the combined CPU usage rate of every container in the `exercises` namespace over a 5-minute window:
+
+```promql
+scalar(sum(rate(container_cpu_usage_seconds_total{namespace="exercises"}[5m])))
+```
+
+`successCondition: result < 0.5` (cores) — a hardcoded value picked after measuring: this namespace's actual idle/light-load usage sits around `0.01`–`0.05` cores, so `0.5` comfortably passes normal traffic while still catching a genuine runaway spike.
+
+**Tested both halves of the requirement**, by temporarily changing `successCondition` and reapplying (which also bumps the revision, since the canary logic only runs on a genuine spec change):
+- **Threshold set too low** (`result < 0.001`, guaranteed below real usage): the `AnalysisRun` correctly came back `Failed` (measured `~0.044` cores at the time) and the Rollout aborted — `kubectl argo rollouts get rollout ping-pong -n exercises` showed `Status: ✖ Degraded`, canary scaled back down, 100% traffic stayed on the stable (pre-update) `ReplicaSet`. The update did not go through, as required.
+- **Threshold reset to `0.5`**: the same update now passed all 3 canary steps and reached `Status: ✔ Healthy`, `SetWeight: 100` — the update completed normally.
+
+Evidence of the blocked (too-low-threshold) run, from `kubectl describe analysisrun <name> -n exercises`:
+
+```
+Status:
+  Message:  Metric "cpu-usage-rate" assessed Failed due to failed (1) > failureLimit (0)
+  Metric Results:
+    Count:   1
+    Failed:  1
+    Measurements:
+      Phase:  Failed
+      Value:  0.043718459009398664
+    Name:     cpu-usage-rate
+    Phase:    Failed
+  Phase:      Failed
+Events:
+  Warning  MetricFailed       rollouts-controller  Metric 'cpu-usage-rate' Completed. Result: Failed
+  Warning  AnalysisRunFailed  rollouts-controller  Analysis Completed. Result: Failed
+```
+
+The same value (`sum(rate(container_cpu_usage_seconds_total{namespace="exercises"}[5m]))` ≈ `0.044` cores) can also be checked directly in Prometheus at `localhost:9090` for the relevant time window, confirming the AnalysisRun measured real cluster data rather than erroring out.
+
+```bash
+# install Argo Rollouts once per cluster (large CRDs, needs --server-side)
+kubectl create namespace argo-rollouts
+kubectl apply --server-side -n argo-rollouts -f https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml
+
+# the kubectl plugin used above, for inspecting Rollouts/AnalysisRuns
+curl -fsSL -o kubectl-argo-rollouts https://github.com/argoproj/argo-rollouts/releases/latest/download/kubectl-argo-rollouts-linux-amd64
+chmod +x kubectl-argo-rollouts && mv kubectl-argo-rollouts /usr/local/bin/
+
+kubectl apply -f manifests/rollout.yaml
+kubectl argo rollouts get rollout ping-pong -n exercises --watch
+```
+
+**Known limitation from going to 2 replicas:** the in-memory counter (`lastShown`/`nextValue`) is loaded once per pod at startup and isn't synchronized live between replicas — with the Gateway load-balancing across both, two consecutive requests can occasionally land on different pods and show the same or an out-of-order `pong <n>` value. This predates and is independent of exercise 4.4's actual subject (canary analysis); fixing it would mean making every request hit Postgres directly (e.g. an atomic `UPDATE ... RETURNING`) instead of serving from in-memory state, which is out of scope here.
