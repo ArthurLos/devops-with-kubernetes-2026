@@ -24,7 +24,7 @@ spec:
             claimName: todo-app-pvc
       containers:
         - name: todo-app
-          image: todo-app:1.6.1
+          image: todo-app:1.7.0
           imagePullPolicy: IfNotPresent
           readinessProbe:
             initialDelaySeconds: 5

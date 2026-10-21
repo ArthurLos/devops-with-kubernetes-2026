@@ -84,6 +84,19 @@ The failure page also sets `<meta http-equiv="refresh" content="5">`, so a visit
 
 **Known, expected glitch:** with only one replica and no connection draining around a liveness-triggered restart (unlike a rolling update, Kubernetes just kills the container), a request that happens to land in the exact instant the old container is killed can get Envoy's own `upstream connect error or disconnect/reset before headers` page for that one request, instead of this app's `503` page. This only affects whichever single request (or auto-refresh) hits that split-second window — traffic is back to normal (either the failure page or the recovered app) immediately after. Not something exercise 4.2 asks to eliminate, and not worth adding complexity for on a single-replica app.
 
+## Exercise 4.5: mark a todo done
+
+Each todo from `../todo-backend` is now `{id, text, done}` instead of a bare string (see that README's exercise 4.5 section). A not-done todo renders with a **"Mark done"** button; a done one renders with its text struck through and a green "Done" label instead.
+
+The button can't be a plain HTML form, since forms only support `GET`/`POST` and the exercise specifically asks for a `PUT` request — so clicking it runs a small inline script (`markDone(id)`) that does `fetch('/todos/<id>', { method: 'PUT', body: '{"done":true}' })` and reloads the page. That `fetch` goes straight to `../todo-backend`, same as the existing "add a todo" form's `POST /todos` already does — the Gateway (`../manifests/gateway.yaml`) routes the `/todos` path prefix directly to `todo-backend-svc`, bypassing this app entirely, so no new backend-proxying code was needed here.
+
+```bash
+# confirm it end-to-end without a browser
+curl -s http://localhost:8081/todos                                    # pick an id, still "done":false
+curl -s -X PUT -H "Content-Type: application/json" -d '{"done":true}' http://localhost:8081/todos/<id>
+curl -s http://localhost:8081/ | grep -A1 'done-label'                 # that todo now renders struck-through with "Done"
+```
+
 ## Testing the image cache
 
 ```bash

@@ -85,7 +85,14 @@ app.get('/', async (req, res) => {
     // todo-backend unreachable, render an empty list
   }
 
-  const todoItems = todos.map((todo) => `<li>${todo}</li>`).join('\n      ');
+  const todoItems = todos
+    .map((todo) => `<li class="${todo.done ? 'done' : ''}">
+        <span class="todo-text">${todo.text}</span>
+        ${todo.done
+          ? '<span class="done-label">Done</span>'
+          : `<button type="button" class="markdone" onclick="markDone(${todo.id})">Mark done</button>`}
+      </li>`)
+    .join('\n      ');
 
   res.send(`<!doctype html>
 <html>
@@ -114,12 +121,58 @@ app.get('/', async (req, res) => {
       }
       ul { list-style: none; padding: 0; max-width: 500px; margin: 0 auto; text-align: left; }
       li {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
         background: #f7f7f7;
         border-left: 4px solid #4caf50;
         padding: 0.75em 1em;
         margin-bottom: 0.5em;
       }
+      li.done {
+        background: #eee;
+        border-left-color: #ccc;
+      }
+      li.done .todo-text {
+        text-decoration: line-through;
+        color: #888;
+      }
+      .todo-text {
+        flex: 1;
+        min-width: 0;
+        word-break: break-word;
+        margin-right: 1em;
+      }
+      .markdone {
+        flex-shrink: 0;
+        white-space: nowrap;
+        padding: 0.4em 0.9em;
+        background: #2f80ed;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .done-label {
+        flex-shrink: 0;
+        white-space: nowrap;
+        color: #2e7d32;
+        font-weight: bold;
+      }
     </style>
+    <script>
+      // Exercise 4.5: fires the actual PUT /todos/<id> the exercise asks for — the
+      // Gateway routes /todos straight to todo-backend (see ../manifests/gateway.yaml),
+      // bypassing this app entirely, same as the existing POST /todos form already does.
+      async function markDone(id) {
+        await fetch(\`/todos/\${id}\`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ done: true }),
+        });
+        location.reload();
+      }
+    </script>
   </head>
   <body>
     <h1>Todo App</h1>

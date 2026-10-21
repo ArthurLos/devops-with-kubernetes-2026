@@ -35,9 +35,13 @@ async function ensureTable() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS todos (
       id SERIAL PRIMARY KEY,
-      text VARCHAR(140) NOT NULL
+      text VARCHAR(140) NOT NULL,
+      done BOOLEAN NOT NULL DEFAULT false
     )
   `);
+  // Exercise 4.5: CREATE TABLE IF NOT EXISTS doesn't touch an already-existing table,
+  // so this covers clusters that still have the pre-4.5 schema.
+  await pool.query('ALTER TABLE todos ADD COLUMN IF NOT EXISTS done BOOLEAN NOT NULL DEFAULT false');
 
   const { rows } = await pool.query('SELECT COUNT(*)::int AS count FROM todos');
   if (rows[0].count === 0) {
@@ -70,8 +74,8 @@ app.get('/healthz', async (req, res) => {
 });
 
 app.get('/todos', async (req, res) => {
-  const { rows } = await pool.query('SELECT text FROM todos ORDER BY id');
-  res.json(rows.map((row) => row.text));
+  const { rows } = await pool.query('SELECT id, text, done FROM todos ORDER BY id');
+  res.json(rows);
 });
 
 app.post('/todos', async (req, res) => {
@@ -91,13 +95,30 @@ app.post('/todos', async (req, res) => {
     await pool.query('INSERT INTO todos (text) VALUES ($1)', [text]);
   }
 
-  const { rows } = await pool.query('SELECT text FROM todos ORDER BY id');
-  const todos = rows.map((row) => row.text);
+  const { rows } = await pool.query('SELECT id, text, done FROM todos ORDER BY id');
 
   if (req.is('application/json')) {
-    return res.status(201).json(todos);
+    return res.status(201).json(rows);
   }
   res.redirect('/');
+});
+
+// Exercise 4.5: mark a todo done (or not), e.g. the "Mark done" button in todo-app.
+app.put('/todos/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  const done = typeof req.body.done === 'boolean' ? req.body.done : true;
+
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: 'id must be an integer' });
+  }
+
+  const { rowCount } = await pool.query('UPDATE todos SET done = $1 WHERE id = $2', [done, id]);
+  if (rowCount === 0) {
+    return res.status(404).json({ error: `No todo with id ${id}` });
+  }
+
+  const { rows } = await pool.query('SELECT id, text, done FROM todos ORDER BY id');
+  res.status(200).json(rows);
 });
 
 // The server starts listening immediately — the readinessProbe (not a startup-blocking

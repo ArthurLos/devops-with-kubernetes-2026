@@ -99,3 +99,19 @@ As of exercise 3.5, the whole project (this app, `../todo-app` and `../wiki-remi
 Same pattern as `../../ping-pong`'s exercise 4.1 `GET /healthz`: a cheap `SELECT 1` on every probe call (not `ensureTable()`, which would be unnecessary to re-run repeatedly), plus a one-time "table initialized" flag so readiness doesn't pass before the `todos` table/seed data exists. `manifests/deployment.yaml` wires this up as a `readinessProbe` (`initialDelaySeconds: 5`, `periodSeconds: 5`).
 
 Tested together with `../todo-app`'s exercise 4.2 test (see that README): scaling `postgres-stset` to 0 replicas and re-applying both Deployments brought both up `0/1`; scaling it back to 1 replica brought both to `1/1` within seconds, no manual intervention.
+
+## Exercise 4.5: a `done` field
+
+The `todos` table gained a `done BOOLEAN NOT NULL DEFAULT false` column, and `GET`/`POST /todos` now return full objects (`{id, text, done}`) instead of bare text strings — `../todo-app` needs the `id` to target a specific todo, and `done` to render it differently. `ensureTable()` also runs an `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` for clusters that already had the pre-4.5 schema, since `CREATE TABLE IF NOT EXISTS` only applies to a table that doesn't exist yet.
+
+```
+PUT /todos/<id>
+Body (optional): { "done": true }   # defaults to true if omitted
+```
+
+Marks a todo done (or not done, if `done: false` is sent explicitly), returns the full updated todo list, `404` if `id` doesn't exist. `../todo-app`'s "Mark done" button fires this directly from the browser (see that README) — the Gateway routes `/todos` straight to this service, so no extra plumbing was needed here beyond the new route itself.
+
+```bash
+curl -s -X PUT -H "Content-Type: application/json" -d '{"done":true}' http://localhost:8081/todos/2
+curl -s http://localhost:8081/todos   # id 2 now has "done":true
+```
