@@ -10,6 +10,23 @@ Structure:
 
 **Local cluster note (chapter 5):** the local k3d cluster now runs with Traefik disabled and [Envoy Gateway](https://gateway.envoyproxy.io/) installed instead (`kubectl apply -f https://github.com/envoyproxy/gateway/releases/latest/download/install.yaml`, plus a `GatewayClass` named `eg`), since several apps (`ping-pong`) rely on Gateway API's `URLRewrite` filter, which plain Ingress has no equivalent for. Routing locally is now via `manifests/gateway.yaml` (one shared `Gateway` for `log_output`+`ping-pong`) and `the_project/manifests/gateway.yaml` (an `HTTPRoute` for `the_project`, attached to that same Gateway — k3d's `ServiceLB` can only bind one Gateway's `LoadBalancer` Service to host port 80). The old `manifests/ingress.yaml` and `the_project/todo-app/manifests/ingress.yaml` are no longer used locally, kept only for historical reference and the exercise tags that predate this change.
 
+**Monitoring (exercise 4.3):** the full chapter 3 stack is installed locally via Helm, in its own `monitoring` namespace (gitignored `monitoring/*-values.yaml`): `prom` (`prometheus-community/prometheus`), `loki` (`grafana/loki`), `k8smon` (`grafana/k8s-monitoring`, i.e. Alloy), and `grafana` (`grafana/grafana`) — installed in that dependency order, same as chapter 3.
+```bash
+kubectl create namespace monitoring
+helm install prom prometheus-community/prometheus -n monitoring -f monitoring/prom-values.yaml
+helm install loki grafana/loki -n monitoring -f monitoring/loki-values.yaml
+helm install k8smon grafana/k8s-monitoring -n monitoring -f monitoring/k8smon-values.yaml
+helm install grafana grafana/grafana -n monitoring -f monitoring/grafana-values.yaml
+kubectl port-forward svc/prom-prometheus-server -n monitoring 9090:80   # through the Service, not a specific pod
+```
+PromQL query from the exercise — the number of pods owned by a `StatefulSet`, filtered via `kube_pod_info`'s `created_by_kind`/`created_by_name` labels (from `kube-state-metrics`):
+```promql
+count(kube_pod_info{namespace="monitoring", created_by_kind="StatefulSet"})
+```
+Result: `3` — matching the exercise's own example exactly. `prometheus-community/prometheus` and `grafana/grafana` run everything as plain `Deployment`s/`DaemonSet`s (no `StatefulSet`s), but **Loki** does: with `deploymentMode: SingleBinary`, its chart creates `loki-0` plus two memcached-backed caches, `loki-chunks-cache-0` and `loki-results-cache-0` — all three `StatefulSet`-owned, which is exactly what this query counts.
+
+![Prometheus query showing 3 StatefulSet-owned pods in the monitoring namespace](docs/prometheus-statefulset-query.png)
+
 Namespaces:
 - `exercises` (since 2.3) — `log_output` and `ping-pong`, i.e. everything from the standalone course exercises (outside the project). Used for all future exercises outside `the_project`.
 - `project` (since 2.4) — everything in `the_project` (`todo-app`, `todo-backend`). Used for all future project-related exercises.
@@ -67,3 +84,4 @@ Each finished exercise gets a git tag named after the exercise (e.g. `1.1`, `1.2
 
 - [4.1.](https://github.com/ArthurLos/devops-with-kubernetes-2026/tree/4.1/ping-pong)
 - [4.2.](https://github.com/ArthurLos/devops-with-kubernetes-2026/tree/4.2/the_project)
+- [4.3.](https://github.com/ArthurLos/devops-with-kubernetes-2026/tree/4.3/README.md)
