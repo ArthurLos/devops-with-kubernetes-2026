@@ -1,0 +1,7 @@
+# Exercise 4.9: see ../../todo-backend/manifests/kustomization.yaml for why this
+# exists. webhook-secret.yaml is excluded - secrets are applied outside ArgoCD.
+# deployment.yaml alone is the "staging" shape (LOG_ONLY, no WEBHOOK_URL at all,
+# so no Secret dependency); ../../overlays/production/patch-broadcaster-webhook.yaml
+# turns forwarding back on for production only.
+resources:
+  - deployment.yaml

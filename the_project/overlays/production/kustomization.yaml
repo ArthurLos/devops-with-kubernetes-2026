@@ -1,0 +1,18 @@
+# Exercise 4.9: the production environment. Tracked by
+# ../../argocd-application-production.yaml at targetRevision production (a branch,
+# not main) - see root README's "Exercise 4.9" section for how pushing a v* tag
+# moves that branch, which is what "each tagged commit results in deployment to
+# production" actually means here.
+namespace: production
+resources:
+  - namespace.yaml
+  - gateway.yaml
+  - ../../todo-backend/manifests
+  - ../../todo-app/manifests
+  - ../../wiki-reminder/manifests
+  - ../../broadcaster/manifests
+patches:
+  - path: patch-broadcaster-webhook.yaml
+    target:
+      kind: Deployment
+      name: broadcaster

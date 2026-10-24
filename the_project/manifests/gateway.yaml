@@ -1,3 +1,6 @@
+# Historical only as of exercise 4.9 - replaced by ../overlays/production/gateway.yaml
+# (see ../README.md's "Exercise 4.9" section). Kept for the exercise tags that
+# predate that split.
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: HTTPRoute
 metadata:

@@ -9,7 +9,13 @@ const PORT = process.env.PORT || 3000;
 const RETRY_DELAY_MS = 2000;
 const MAX_TODO_LENGTH = 140;
 const NATS_URL = process.env.NATS_URL || 'nats://my-nats.nats.svc.cluster.local:4222';
-const TODO_EVENTS_SUBJECT = 'todo_events';
+// Exercise 4.9: staging/production (and any future per-branch namespace) all share
+// one NATS instance, so the subject itself must be scoped per namespace - otherwise
+// a queue-group subscriber (../broadcaster) in one namespace can end up receiving
+// another namespace's event, which is exactly how a staging-only todo could get
+// forwarded to production's real external webhook.
+const POD_NAMESPACE = process.env.POD_NAMESPACE || 'local';
+const TODO_EVENTS_SUBJECT = `todo_events.${POD_NAMESPACE}`;
 
 const pool = new Pool();
 

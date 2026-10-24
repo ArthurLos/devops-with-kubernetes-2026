@@ -1,0 +1,18 @@
+# Exercise 4.9: a dynamically-provisioned PVC for the cached picture, instead of
+# the project namespace's manually pre-created, hostPath-pinned PersistentVolume
+# (../../../manifests/todo-app-persistentvolume.yaml) - that PV can only ever bind
+# to one PVC at a time, which doesn't work once there's more than one environment.
+# Same local-path StorageClass already used by ../../todo-backend/manifests/postgres.yaml's
+# PersistentVolumeClaim, so staging and production each get their own independent
+# volume automatically, no manual PV/node-pinning needed per environment.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: todo-app-pvc
+spec:
+  storageClassName: local-path
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi

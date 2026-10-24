@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: broadcaster
-          image: broadcaster:1.0.0
+          image: broadcaster:1.1.0
           imagePullPolicy: IfNotPresent
           readinessProbe:
             initialDelaySeconds: 5
@@ -35,8 +35,13 @@ spec:
               value: "3000"
             - name: NATS_URL
               value: nats://my-nats.nats.svc.cluster.local:4222
-            - name: WEBHOOK_URL
+            - name: POD_NAMESPACE
               valueFrom:
-                secretKeyRef:
-                  name: broadcaster-webhook
-                  key: WEBHOOK_URL
+                fieldRef:
+                  fieldPath: metadata.namespace
+            # Exercise 4.9: safe-by-default - log only, no WEBHOOK_URL/Secret needed
+            # at all. ../../overlays/production/patch-broadcaster-webhook.yaml flips
+            # this to "false" and adds WEBHOOK_URL for production only; staging keeps
+            # this base as-is, per the exercise's "staging just logs, doesn't forward".
+            - name: LOG_ONLY
+              value: "true"

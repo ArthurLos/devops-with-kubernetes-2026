@@ -121,3 +121,7 @@ curl -s http://localhost:8081/todos   # id 2 now has "done":true
 On every `POST /todos` (create) and `PUT /todos/<id>` (update), this service publishes a `todo_events` message to [NATS](https://nats.io/) (`NATS_URL`, default `nats://my-nats.nats.svc.cluster.local:4222`) — `{"type": "created"|"updated", "id", "text", "done"}`. `../broadcaster` subscribes to that subject and forwards it to an external chat service — see that README for the full picture (queue groups, scaling test, the webhook).
 
 Connecting to NATS follows the same non-blocking-startup pattern as Postgres above (`ensureTable()`'s retry loop): the HTTP server starts immediately, and publishing is best-effort — if NATS isn't connected yet (or drops), `publishTodoEvent()` just logs a warning and skips, it never fails the actual todo create/update request.
+
+## Exercise 4.9: namespace-scoped NATS subject
+
+As of exercise 4.9 (staging/production environments), the publish subject is `todo_events.<namespace>` instead of a bare `todo_events` — `<namespace>` comes from `POD_NAMESPACE` (Downward API `fieldRef: metadata.namespace` in `manifests/deployment.yaml`), not an app-level config value, so it's always correct automatically regardless of which namespace this Deployment actually runs in. Necessary because every environment shares one NATS instance: a NATS queue group (`../broadcaster`'s subscription) is global across the whole connection, not scoped per Kubernetes namespace, so a bare `todo_events` subject would let an event from one namespace reach a subscriber in another.

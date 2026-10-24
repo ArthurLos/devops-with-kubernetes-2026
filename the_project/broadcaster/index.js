@@ -6,7 +6,14 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const NATS_URL = process.env.NATS_URL || 'nats://my-nats.nats.svc.cluster.local:4222';
 const WEBHOOK_URL = process.env.WEBHOOK_URL;
-const SUBJECT = 'todo_events';
+// Exercise 4.9: staging just logs every event, production forwards to the real
+// webhook - an explicit flag rather than relying on WEBHOOK_URL being unset, so a
+// stray Secret in staging can't accidentally turn forwarding back on by itself.
+const LOG_ONLY = process.env.LOG_ONLY === 'true';
+// Must match ../todo-backend/index.js's namespace-scoped subject - see its own
+// comment for why (otherwise a staging event could reach production's subscriber).
+const POD_NAMESPACE = process.env.POD_NAMESPACE || 'local';
+const SUBJECT = `todo_events.${POD_NAMESPACE}`;
 // All replicas subscribe under the same queue group name, so NATS hands each
 // published message to exactly one of them — this is what lets the broadcaster be
 // scaled to many replicas without the same event being forwarded more than once
@@ -31,12 +38,18 @@ function describe(event) {
 }
 
 async function forwardToWebhook(event) {
+  const message = describe(event);
+
+  if (LOG_ONLY) {
+    console.log(`[staging, log-only] ${message}`);
+    return;
+  }
+
   if (!WEBHOOK_URL) {
     console.warn('WEBHOOK_URL not set, dropping event:', event);
     return;
   }
 
-  const message = describe(event);
   try {
     const response = await fetch(WEBHOOK_URL, {
       method: 'POST',

@@ -1,0 +1,3 @@
+# Exercise 4.9: see ../../todo-backend/manifests/kustomization.yaml for why this exists.
+resources:
+  - cronjob.yaml

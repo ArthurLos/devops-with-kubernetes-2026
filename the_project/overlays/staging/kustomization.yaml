@@ -1,0 +1,13 @@
+# Exercise 4.9: the staging environment. Tracked by ../../argocd-application-staging.yaml
+# at targetRevision main - every commit to main redeploys this automatically. No
+# HTTPRoute here on purpose: staging isn't exposed on the shared Gateway (that stays
+# production's path), reachable via `kubectl port-forward` / in-cluster only, which is
+# a common real-world staging setup too. No webhook forwarding patch either - the
+# broadcaster's base manifests/deployment.yaml already defaults to LOG_ONLY=true.
+namespace: staging
+resources:
+  - namespace.yaml
+  - ../../todo-backend/manifests
+  - ../../todo-app/manifests
+  - ../../wiki-reminder/manifests
+  - ../../broadcaster/manifests

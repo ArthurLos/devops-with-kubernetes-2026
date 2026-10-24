@@ -1,0 +1,28 @@
+# Exercise 4.9: staging environment. Applied once, manually:
+#
+#   kubectl apply -f the_project/argocd-application-staging.yaml
+#
+# Tracks main directly (same as exercises 4.7/4.8) - every commit to main that
+# touches overlays/staging or anything it pulls in gets deployed automatically.
+# Secrets (postgres-credentials) are applied by hand in the staging namespace
+# ahead of time, per the exercise - never part of this sync, see root README.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: the-project-staging
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ArthurLos/devops-with-kubernetes-2026.git
+    targetRevision: main
+    path: the_project/overlays/staging
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false

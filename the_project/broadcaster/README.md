@@ -9,6 +9,12 @@ Exercise 4.6: a separate service that broadcasts todo status changes to an exter
 
 `todo-backend` publishing is best-effort: if NATS is unreachable, it logs a warning and the todo is still created/updated normally — core app functionality doesn't depend on the broadcast succeeding.
 
+## Exercise 4.9: `LOG_ONLY` mode
+
+`LOG_ONLY=true` (the default in `manifests/deployment.yaml` — safe by default, no `WEBHOOK_URL`/`Secret` needed at all) makes `forwardToWebhook` just `console.log` the message and return, instead of actually `POST`ing it anywhere. `../overlays/production/patch-broadcaster-webhook.yaml` is the only place that overrides it back to `"false"` (and adds `WEBHOOK_URL`) — so staging always just logs, production always forwards, by construction rather than by (forgettable) convention. See `../README.md`'s "Exercise 4.9" section for the full staging/production picture.
+
+Subscribes to `todo_events.<namespace>` (not a bare `todo_events`) — see `../todo-backend/README.md`'s "Exercise 4.9" section for why.
+
 ## Scaling without duplicate messages
 
 The exercise's actual requirement ("can run with 6 replicas without issues... a duplicate is an issue, a randomly missing message is not") is solved entirely by NATS' own [queue group](https://docs.nats.io/nats-concepts/core-nats/queue) semantics, with no deduplication logic needed in the app itself: every `broadcaster` replica subscribes to `todo_events` under the same queue group name (`"broadcaster"`), so NATS hands each published message to exactly one member of the group — never more than one, and (per Core NATS' at-most-once delivery) not guaranteed to every member if one happens to be down, which is explicitly fine per the exercise.
