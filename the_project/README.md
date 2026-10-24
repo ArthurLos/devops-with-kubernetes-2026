@@ -197,14 +197,11 @@ The local k3d cluster doesn't use the GKE-specific `kustomization.yaml` above �
 
 Same mechanism as `../log_output`'s exercise 4.7 (see that README for the general explanation of ArgoCD/`automated: {prune, selfHeal}`), but this project's manifests live across several subfolders (one per microservice) instead of one shared `manifests/`, so this originally registered the whole project as a single [multi-source Application](https://argo-cd.readthedocs.io/en/stable/user-guide/multiple_sources/) (ArgoCD 2.6+) — one plain-directory source per app's `manifests/` folder, synced into the `project` namespace.
 
-Applying it for the first time reported `Synced`/`Healthy` immediately, with all 13 resources already matching what was running (`Namespace`, `ConfigMap`, 2 `Secret`s, 3 `Service`s, 3 `Deployment`s, 1 `StatefulSet`, 1 `CronJob`, 1 `HTTPRoute`) — confirming ArgoCD took over management without pruning or recreating anything that was already correctly deployed by hand in earlier exercises.
-
-![ArgoCD resource tree for the-project, part 1: todo-backend/postgres/wiki-reminder/project-route all Synced/Healthy](./argocd-sync-1.png)
-![ArgoCD resource tree for the-project, part 2: todo-app/todo-backend/broadcaster Services, Secrets and ConfigMap all Synced/Healthy](./argocd-sync-2.png)
+Applying it for the first time reported `Synced`/`Healthy` immediately, with all 13 resources already matching what was running (`Namespace`, `ConfigMap`, 2 `Secret`s, 3 `Service`s, 3 `Deployment`s, 1 `StatefulSet`, 1 `CronJob`, 1 `HTTPRoute`) — confirming ArgoCD took over management without pruning or recreating anything that was already correctly deployed by hand in earlier exercises. (Screenshots proving this removed from the current tree as of exercise 4.10's cleanup — redundant once config moved to a separate repo — still visible at the [`4.8` tag](https://github.com/ArthurLos/devops-with-kubernetes-2026/tree/4.8/the_project).)
 
 **"enough that the main branch is deployed to cluster"** (the exercise's own scope) was satisfied by `syncPolicy.automated` alone: any commit pushed to `main` that touched one of the sourced paths was picked up and applied automatically, same live-tested behavior as `../log_output/README.md`'s exercise 4.7 section.
 
-**Superseded by exercise 4.9 below**: the single `project` namespace/Application this section describes no longer exists — it's been replaced by separate `staging`/`production` environments. `argocd-application.yaml` and the `project` namespace were removed as part of that migration (the screenshots above are kept as historical proof of this exercise's own result, at the time it was done).
+**Superseded by exercise 4.9 below**: the single `project` namespace/Application this section describes no longer exists — it's been replaced by separate `staging`/`production` environments. `argocd-application.yaml` and the `project` namespace were removed as part of that migration.
 
 ## Exercise 4.9: staging and production environments
 
@@ -270,14 +267,7 @@ Since staging+production now cover everything the old single `project` environme
 
 Staging and production share one NATS instance, so `todo-backend`/`broadcaster` scope their subject per namespace (`todo_events.<namespace>`, see `todo-backend/README.md`'s "Exercise 4.9" section) — verified no cross-environment leak in either direction:
 
-**The GitOps chain itself**, after pushing this commit: `argocd-application-staging.yaml`/`argocd-application-production.yaml` both applied cleanly, immediately `Synced`/`Healthy` at this commit's SHA (11 resources for staging, 12 for production including its `HTTPRoute` — no `Secret`s in either, as expected). Pushing a `v1.0.0` tag triggered `promote-production.yml` on its own, which created a `production` branch pointing at this exact commit; `the-project-production`'s Application tracked it immediately, no manual sync needed. This paragraph itself is the second promotion test: it landed on `main` first (so `the-project-staging` picked it up immediately, same mechanism as always), and a separate `v1.1.0` tag afterwards promoted the exact same commit to `production`.
-
-![ArgoCD Applications tiles: the-project-staging (main → staging) and the-project-production (production branch → production), both Synced/Healthy](./argocd-staging-vs-production.png)
-
-Both ended up `Synced to (68f140a)` — the same commit SHA, reached via two different triggers (`main` directly vs. a `v1.1.0` tag moving the `production` branch):
-
-![the-project-staging detail: Synced to main (68f140a)](./argocd-staging-detail.png)
-![the-project-production detail: Synced to production (68f140a)](./argocd-production-detail.png)
+**The GitOps chain itself**, after pushing this commit: `argocd-application-staging.yaml`/`argocd-application-production.yaml` both applied cleanly, immediately `Synced`/`Healthy` at this commit's SHA (11 resources for staging, 12 for production including its `HTTPRoute` — no `Secret`s in either, as expected). Pushing a `v1.0.0` tag triggered `promote-production.yml` on its own, which created a `production` branch pointing at this exact commit; `the-project-production`'s Application tracked it immediately, no manual sync needed. This paragraph itself is the second promotion test: it landed on `main` first (so `the-project-staging` picked it up immediately, same mechanism as always), and a separate `v1.1.0` tag afterwards promoted the exact same commit to `production` — both ended up `Synced to (68f140a)`, the same commit SHA, reached via two different triggers. (Screenshots proving this removed from the current tree as of exercise 4.10's cleanup — still visible at the [`4.9` tag](https://github.com/ArthurLos/devops-with-kubernetes-2026/tree/4.9/the_project).)
 
 ```bash
 kubectl port-forward -n staging svc/todo-backend-svc 8092:2345 &
