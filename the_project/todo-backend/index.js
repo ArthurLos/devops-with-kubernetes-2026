@@ -2,11 +2,14 @@ require('dotenv').config();
 const express = require('express');
 const morgan = require('morgan');
 const { Pool } = require('pg');
+const { connect, JSONCodec } = require('nats');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const RETRY_DELAY_MS = 2000;
 const MAX_TODO_LENGTH = 140;
+const NATS_URL = process.env.NATS_URL || 'nats://my-nats.nats.svc.cluster.local:4222';
+const TODO_EVENTS_SUBJECT = 'todo_events';
 
 const pool = new Pool();
 
@@ -15,6 +18,33 @@ const pool = new Pool();
 pool.on('error', (err) => {
   console.error('Unexpected Postgres pool error:', err.message);
 });
+
+// Exercise 4.6: publishing is best-effort — todo CRUD must keep working even if NATS
+// (or ../broadcaster) is down, so a missing connection just skips the publish instead
+// of failing the request.
+const jc = JSONCodec();
+let natsConnection = null;
+
+(async () => {
+  for (;;) {
+    try {
+      natsConnection = await connect({ servers: NATS_URL });
+      break;
+    } catch (err) {
+      console.log(`NATS not reachable yet (${err.message}), retrying in ${RETRY_DELAY_MS}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+    }
+  }
+  console.log(`Connected to NATS at ${NATS_URL}`);
+})();
+
+function publishTodoEvent(type, todo) {
+  if (!natsConnection) {
+    console.warn(`NATS not connected, skipping ${type} event for todo ${todo.id}`);
+    return;
+  }
+  natsConnection.publish(TODO_EVENTS_SUBJECT, jc.encode({ type, ...todo }));
+}
 
 app.use(morgan('combined'));
 app.use(express.urlencoded({ extended: true }));
@@ -92,7 +122,11 @@ app.post('/todos', async (req, res) => {
   }
 
   if (text) {
-    await pool.query('INSERT INTO todos (text) VALUES ($1)', [text]);
+    const { rows: inserted } = await pool.query(
+      'INSERT INTO todos (text) VALUES ($1) RETURNING id, text, done',
+      [text]
+    );
+    publishTodoEvent('created', inserted[0]);
   }
 
   const { rows } = await pool.query('SELECT id, text, done FROM todos ORDER BY id');
@@ -112,10 +146,14 @@ app.put('/todos/:id', async (req, res) => {
     return res.status(400).json({ error: 'id must be an integer' });
   }
 
-  const { rowCount } = await pool.query('UPDATE todos SET done = $1 WHERE id = $2', [done, id]);
-  if (rowCount === 0) {
+  const { rows: updated } = await pool.query(
+    'UPDATE todos SET done = $1 WHERE id = $2 RETURNING id, text, done',
+    [done, id]
+  );
+  if (updated.length === 0) {
     return res.status(404).json({ error: `No todo with id ${id}` });
   }
+  publishTodoEvent('updated', updated[0]);
 
   const { rows } = await pool.query('SELECT id, text, done FROM todos ORDER BY id');
   res.status(200).json(rows);

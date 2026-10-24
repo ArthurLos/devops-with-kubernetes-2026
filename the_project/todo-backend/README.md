@@ -115,3 +115,9 @@ Marks a todo done (or not done, if `done: false` is sent explicitly), returns th
 curl -s -X PUT -H "Content-Type: application/json" -d '{"done":true}' http://localhost:8081/todos/2
 curl -s http://localhost:8081/todos   # id 2 now has "done":true
 ```
+
+## Exercise 4.6: publishing todo events to NATS
+
+On every `POST /todos` (create) and `PUT /todos/<id>` (update), this service publishes a `todo_events` message to [NATS](https://nats.io/) (`NATS_URL`, default `nats://my-nats.nats.svc.cluster.local:4222`) — `{"type": "created"|"updated", "id", "text", "done"}`. `../broadcaster` subscribes to that subject and forwards it to an external chat service — see that README for the full picture (queue groups, scaling test, the webhook).
+
+Connecting to NATS follows the same non-blocking-startup pattern as Postgres above (`ensureTable()`'s retry loop): the HTTP server starts immediately, and publishing is best-effort — if NATS isn't connected yet (or drops), `publishTodoEvent()` just logs a warning and skips, it never fails the actual todo create/update request.
