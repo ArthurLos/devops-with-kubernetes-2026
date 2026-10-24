@@ -1,0 +1,33 @@
+# Exercise 4.7: GitOps bootstrap for log_output.
+#
+# This is NOT part of the app's own manifests (deliberately kept out of
+# manifests/, so ArgoCD's directory source below doesn't try to sync itself).
+# Applied once, manually, directly into the argocd namespace to register the
+# app with ArgoCD:
+#
+#   kubectl apply -f log_output/argocd-application.yaml
+#
+# From then on, ArgoCD polls this repo's main branch (every ~180s by default)
+# and applies manifests/*.yaml (non-recursive, so manifests/gke/ is ignored —
+# that's GKE-only and not relevant to this local cluster) into the exercises
+# namespace automatically: prune removes resources deleted from git, selfHeal
+# reverts manual cluster drift back to match git. No kubectl apply needed for
+# day-to-day changes anymore — just commit and push.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: log-output
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ArthurLos/devops-with-kubernetes-2026.git
+    targetRevision: main
+    path: log_output/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: exercises
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

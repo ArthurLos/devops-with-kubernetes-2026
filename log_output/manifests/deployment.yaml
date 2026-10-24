@@ -12,6 +12,7 @@ spec:
     metadata:
       labels:
         app: log-output
+        app.kubernetes.io/managed-by: argocd-gitops
     spec:
       volumes:
         - name: shared-status

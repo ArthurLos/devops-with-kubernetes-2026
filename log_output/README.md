@@ -101,3 +101,25 @@ kubectl delete -f ../manifests/ingress.yaml
 The reader is ready once it can actually reach `../ping-pong` — `GET /healthz` calls `PINGPONG_URL` and returns `500` if that fails, `200` otherwise. `manifests/deployment.yaml`/`manifests/gke/deployment.yaml` wire this up as a `readinessProbe` (`initialDelaySeconds: 5`, `periodSeconds: 5`) on the `reader` container only — `writer` has no HTTP server and gets no probe.
 
 This cascades naturally from Ping-pong's own readiness (exercise 4.1 in `../ping-pong/README.md`): a Service only sends traffic to Ready pods, so while `ping-pong`'s Pod is `0/1` (Postgres unavailable), `ping-pong-svc` has zero endpoints, `PINGPONG_URL` fails to connect, and this reader correctly drops to not-ready too — no explicit dependency wiring needed, just two independent readiness probes composing through the Service layer. Tested together with `../ping-pong`'s test (see that README): scaling Postgres to 0 replicas drops both to not-ready, scaling it back to 1 brings both back within a few seconds.
+
+## Exercise 4.7: GitOps with ArgoCD
+
+`argocd-application.yaml` (kept outside `manifests/` on purpose — see its own comment) registers this app with [ArgoCD](https://argo-cd.readthedocs.io/) (installed locally per the chapter 5 "GitOps" reading — see the root README), applied once:
+
+```bash
+kubectl apply -f argocd-application.yaml
+```
+
+From then on ArgoCD polls this repo's `main` branch (default ~180s) and applies everything under `manifests/*.yaml` (non-recursive — `manifests/gke/` is correctly ignored) straight into the `exercises` namespace:
+- `prune: true` — removes anything deleted from git.
+- `selfHeal: true` — reverts manual `kubectl` drift back to match git.
+
+No `kubectl apply` needed for day-to-day changes to this app anymore: **commit and push, ArgoCD does the rest.**
+
+![ArgoCD showing log-output Synced/Healthy, with its resource tree (ConfigMap, Service, Deployment → ReplicaSet → Pod)](./argocd-sync.png)
+
+**Tested**: added the `app.kubernetes.io/managed-by: argocd-gitops` label to the Pod template in `manifests/deployment.yaml` and pushed straight to `main` — no manual `kubectl apply` at all. Confirmed via `kubectl get application log-output -n argocd` that ArgoCD picked up the new commit on its own and reported `Synced`/`Healthy` at the new revision, and via `kubectl get pods -n exercises -o jsonpath='{.items[0].metadata.labels}'` that the running Pod was rolled and now carries the new label — proof the whole path (git push → ArgoCD detects → applies → Deployment rolls) works without a human touching the cluster.
+
+Note: `MESSAGE` (the `ConfigMap`-sourced env var on `reader`) would *not* have shown this automatically — Kubernetes doesn't restart a Pod just because a `ConfigMap` it reads via `env.valueFrom` changed, only a Pod *template* change (like the label above) triggers a rollout. A future improvement would be a checksum annotation on the template derived from the `ConfigMap`'s content, forcing a rollout whenever it changes too — not needed for this exercise.
+
+ArgoCD itself runs on the same local k3d cluster (no GKE/cloud involved, consistent with the rest of chapter 5) — reachable at `https://localhost:8443` via `kubectl port-forward -n argocd svc/argocd-server 8443:443` (its `Service` is `type: LoadBalancer` per the course material, but k3d can't give it a real external IP here since the shared Envoy Gateway already occupies the one host port 80/443 mapping this cluster has — port-forward is the local equivalent).
