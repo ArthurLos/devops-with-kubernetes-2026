@@ -144,6 +144,23 @@ GKE ships with Kubernetes Engine Monitoring already enabled — container stdout
   resource.labels.container_name="todo-backend"
   ```
 
+## Exercise 4.8: GitOps with ArgoCD
+
+Same mechanism as `../log_output`'s exercise 4.7 (see that README for the general explanation of ArgoCD/`automated: {prune, selfHeal}`), but this project's manifests live across several subfolders (one per microservice) instead of one shared `manifests/`, so `argocd-application.yaml` registers it as a [multi-source Application](https://argo-cd.readthedocs.io/en/stable/user-guide/multiple_sources/) (ArgoCD 2.6+) — one plain-directory source per app's `manifests/` folder, all synced together into the `project` namespace:
+
+```bash
+kubectl apply -f argocd-application.yaml
+```
+
+Deliberately **not** reused for this: this folder's own `kustomization.yaml` (GKE-specific — Artifact Registry images, `manifests/gke/` variants — kept for the GitHub Actions pipeline in case GKE work resumes, see exercise 3.6 above) and `db-backup/` (only meaningful against a real GCS bucket/service-account key per `db-backup/README.md`, and was never part of the local k3d deployment even before GitOps — unaffected by this exercise). `todo-app/manifests/ingress.yaml` is excluded the same way `../log_output` excludes its GKE-only files: it's obsolete locally (replaced by the Gateway API `HTTPRoute` in `manifests/gateway.yaml`), via the source's `directory.exclude`.
+
+Applying it for the first time reported `Synced`/`Healthy` immediately, with all 13 resources already matching what was running (`Namespace`, `ConfigMap`, 2 `Secret`s, 3 `Service`s, 3 `Deployment`s, 1 `StatefulSet`, 1 `CronJob`, 1 `HTTPRoute`) — confirming ArgoCD took over management without pruning or recreating anything that was already correctly deployed by hand in earlier exercises.
+
+![ArgoCD resource tree for the-project, part 1: todo-backend/postgres/wiki-reminder/project-route all Synced/Healthy](./argocd-sync-1.png)
+![ArgoCD resource tree for the-project, part 2: todo-app/todo-backend/broadcaster Services, Secrets and ConfigMap all Synced/Healthy](./argocd-sync-2.png)
+
+**"enough that the main branch is deployed to cluster"** (the exercise's own scope) is satisfied by `syncPolicy.automated` alone: any commit pushed to `main` that touches one of the sourced paths is picked up and applied automatically, same live-tested behavior as `../log_output/README.md`'s exercise 4.7 section.
+
 Verified by creating a new todo (`POST /todos`) with a distinctive marker text and finding it in Logs Explorer within seconds — both `todo-backend`'s `morgan` access-log line and its own `Received todo (...)` line (added in exercise 2.10) show up:
 
 ![GKE Logs Explorer showing the log line for a newly created todo](docs/gke-logs-new-todo.png)
