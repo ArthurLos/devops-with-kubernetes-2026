@@ -268,6 +268,8 @@ Since staging+production now cover everything the old single `project` environme
 
 Staging and production share one NATS instance, so `todo-backend`/`broadcaster` scope their subject per namespace (`todo_events.<namespace>`, see `todo-backend/README.md`'s "Exercise 4.9" section) — verified no cross-environment leak in either direction:
 
+**The GitOps chain itself**, after pushing this commit: `argocd-application-staging.yaml`/`argocd-application-production.yaml` both applied cleanly, immediately `Synced`/`Healthy` at this commit's SHA (11 resources for staging, 12 for production including its `HTTPRoute` — no `Secret`s in either, as expected). Pushing a `v1.0.0` tag triggered `promote-production.yml` on its own, which created a `production` branch pointing at this exact commit; `the-project-production`'s Application tracked it immediately, no manual sync needed. This paragraph itself is the second promotion test: it's part of the commit that gets tagged `4.9` on `main` (staging only), and a separate `v1.1.0` tag afterwards is what actually promotes it to `production` — see the root README's "Exercise 4.9" section for that result.
+
 ```bash
 kubectl port-forward -n staging svc/todo-backend-svc 8092:2345 &
 curl -s -X POST -H "Content-Type: application/json" -d '{"text":"staging test"}' http://localhost:8092/todos
