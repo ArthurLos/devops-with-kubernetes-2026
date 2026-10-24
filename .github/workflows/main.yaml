@@ -1,12 +1,11 @@
 name: Release project
 
+# Disabled after the GKE cluster/Artifact Registry/Workload Identity pool were torn
+# down post-chapter-4 (cost cleanup) — chapter 5 stays on the local k3d cluster, so
+# this workflow has nothing to auth/push/deploy to and would just fail on every push.
+# Kept (not deleted) for history and in case GKE work resumes; manual-only for now.
 on:
-  push:
-    # Explicit branches filter (not a bare `push:`) so this only runs for branch
-    # pushes, not for exercise git tags (e.g. `3.7`) — those aren't valid namespace
-    # names and would just fail the per-branch deploy from exercise 3.7.
-    branches:
-      - '**'
+  workflow_dispatch:
 
 permissions:
   contents: read

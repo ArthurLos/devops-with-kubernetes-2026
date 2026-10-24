@@ -1,7 +1,9 @@
 name: Delete branch environment
 
+# Disabled for the same reason as main.yaml (see its comment) — no GKE cluster to
+# delete a namespace from right now.
 on:
-  delete:
+  workflow_dispatch:
 
 permissions:
   contents: read
