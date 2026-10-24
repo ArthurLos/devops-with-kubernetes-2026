@@ -4,6 +4,11 @@ name: Release project
 # down post-chapter-4 (cost cleanup) — chapter 5 stays on the local k3d cluster, so
 # this workflow has nothing to auth/push/deploy to and would just fail on every push.
 # Kept (not deleted) for history and in case GKE work resumes; manual-only for now.
+#
+# As of exercise 4.10, the `deploy` job below is doubly out of date: the_project's
+# Kubernetes manifests/kustomization.yaml it references have moved to a separate
+# repository (https://github.com/ArthurLos/the-project-config) - this workflow
+# would need updating to check that repo out too before it could ever run again.
 on:
   workflow_dispatch:
 

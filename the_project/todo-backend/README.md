@@ -29,34 +29,30 @@ npm start
 
 ## Build and deploy
 
+**As of exercise 4.10**, this section's old `kubectl apply -f manifests/...` steps no longer apply — this app's manifests moved to [ArthurLos/the-project-config](https://github.com/ArthurLos/the-project-config) (see `../README.md`'s "Exercise 4.10"). Deployment is now via ArgoCD (that repo's `argocd-application-staging.yaml`/`argocd-application-production.yaml`); this section only still covers building and locally importing the image:
+
 ```bash
 # build the image (bump the tag when the code changes)
-docker build -t todo-backend:2.3.0 .
+docker build -t todo-backend:2.6.0 .
 
 # get cluster name if you don't know it
 k3d cluster list
 
 # load it into your local cluster
-k3d image import todo-backend:2.3.0 -c <cluster-name>
+k3d image import todo-backend:2.6.0 -c <cluster-name>
 
-# the project namespace, Postgres credentials/StatefulSet/Service must exist first (repo root for the namespace)
-kubectl apply -f ../../manifests/namespace-project.yaml
-kubectl apply -f manifests/postgres-secret.yaml
-kubectl apply -f manifests/postgres.yaml
-kubectl rollout status statefulset/postgres-stset -n project
-
-# update the image tag in manifests/deployment.yaml to match, then apply
-kubectl apply -f manifests/deployment.yaml
-kubectl apply -f manifests/service.yaml
+# bump the image tag in the-project-config's todo-backend/manifests/deployment.yaml
+# to match, commit and push - ArgoCD picks it up automatically (staging on push to
+# main, production on a v* tag - see the-project-config's README)
 
 # confirm it's running
-kubectl get pods -n project
-kubectl logs -f <pod-name> -n project
+kubectl get pods -n staging    # or -n production
+kubectl logs -f <pod-name> -n staging
 ```
 
 ## Access it locally
 
-- `GET /todos` is exposed externally via the shared `Gateway`/`HTTPRoute` (`../manifests/gateway.yaml`, path `/todos`), e.g. `http://localhost:8081/todos` — check your cluster's port mapping.
+- `GET /todos` is exposed externally via the shared `Gateway`/`HTTPRoute` (as of exercise 4.10, `production-route` in [the-project-config](https://github.com/ArthurLos/the-project-config)'s `overlays/production/gateway.yaml`), e.g. `http://localhost:8081/todos` — check your cluster's port mapping.
 - Cluster-internal address: `http://todo-backend-svc:2345/todos`.
 
 ## Testing

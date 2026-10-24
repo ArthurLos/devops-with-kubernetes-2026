@@ -52,7 +52,8 @@ gcloud auth configure-docker europe-west4-docker.pkg.dev
 docker tag db-backup:1.0.0 europe-west4-docker.pkg.dev/<project-id>/dwk-repo/db-backup:1.0.0
 docker push europe-west4-docker.pkg.dev/<project-id>/dwk-repo/db-backup:1.0.0
 
-# deployed as part of ../kustomization.yaml (see ../README.md) — not applied standalone
+# deployed as part of the GKE kustomization.yaml, which as of exercise 4.10 lives in
+# https://github.com/ArthurLos/the-project-config (see ../README.md) — not applied standalone
 ```
 
 ## Testing

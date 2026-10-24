@@ -11,7 +11,7 @@ Exercise 4.6: a separate service that broadcasts todo status changes to an exter
 
 ## Exercise 4.9: `LOG_ONLY` mode
 
-`LOG_ONLY=true` (the default in `manifests/deployment.yaml` — safe by default, no `WEBHOOK_URL`/`Secret` needed at all) makes `forwardToWebhook` just `console.log` the message and return, instead of actually `POST`ing it anywhere. `../overlays/production/patch-broadcaster-webhook.yaml` is the only place that overrides it back to `"false"` (and adds `WEBHOOK_URL`) — so staging always just logs, production always forwards, by construction rather than by (forgettable) convention. See `../README.md`'s "Exercise 4.9" section for the full staging/production picture.
+`LOG_ONLY=true` (the default in [the-project-config](https://github.com/ArthurLos/the-project-config)'s `broadcaster/manifests/deployment.yaml` — safe by default, no `WEBHOOK_URL`/`Secret` needed at all) makes `forwardToWebhook` just `console.log` the message and return, instead of actually `POST`ing it anywhere. That repo's `overlays/production/patch-broadcaster-webhook.yaml` is the only place that overrides it back to `"false"` (and adds `WEBHOOK_URL`) — so staging always just logs, production always forwards, by construction rather than by (forgettable) convention. See `../README.md`'s "Exercise 4.9" section for the full staging/production picture.
 
 Subscribes to `todo_events.<namespace>` (not a bare `todo_events`) — see `../todo-backend/README.md`'s "Exercise 4.9" section for why.
 
@@ -33,12 +33,7 @@ The same scaling test, seen from the NATS side via the Grafana dashboard set up 
 
 ## Generic webhook
 
-```bash
-# manifests/webhook-secret.yaml holds WEBHOOK_URL (a webhook.site test endpoint for
-# local verification — see the Secret's own comment for why this is committed)
-kubectl apply -f manifests/webhook-secret.yaml
-kubectl apply -f manifests/deployment.yaml
-```
+**As of exercise 4.10**, this app's manifests (including `webhook-secret.yaml`'s own comment on why a webhook.site test URL is committed) live in [ArthurLos/the-project-config](https://github.com/ArthurLos/the-project-config)'s `broadcaster/manifests/` — deployed via ArgoCD, not `kubectl apply -f` directly, and `webhook-secret.yaml` specifically is excluded from that sync (secrets applied by hand, per exercise 4.9).
 
 ```bash
 # trigger from the already-running app, or directly:

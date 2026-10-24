@@ -2,6 +2,8 @@
 
 The course's main project: a todo app (`todo-app/`, the frontend + cached-image service), its backend (`todo-backend/`, Postgres-backed todo storage), and a CronJob that periodically adds a "read this" reminder todo (`wiki-reminder/`). See each subfolder's own README for details on that specific service.
 
+**As of exercise 4.10, this folder holds application source code and Dockerfiles only.** Every Kubernetes manifest, Kustomize overlay, and ArgoCD `Application` definition for this project has moved to a separate repository: **[ArthurLos/the-project-config](https://github.com/ArthurLos/the-project-config)** — see its README for the deployable structure, and this file's "Exercise 4.10" section (near the end) for why and how. Everything below this point that mentions `manifests/`, `kustomization.yaml`, or `overlays/` as if they're still in this folder describes **historical state**, accurate for the exercise tags that predate 4.10 (up to and including `4.9`) — kept as-is rather than rewritten, since it was correct at the time and those tags still have those files.
+
 As of exercise 3.5, the whole project is deployed to GKE as **one unit via [Kustomize](https://kustomize.io/)** (`kustomization.yaml` in this folder) instead of applying each app's manifests one by one. This also solves the ordering problem the course material calls out: `kubectl apply -f manifests/` applies files alphabetically, which breaks if (for example) a ConfigMap is created before its namespace exists — Kustomize instead applies resources in the order you list them in `resources:`.
 
 ## What `kustomization.yaml` does
@@ -294,3 +296,30 @@ Full picture, applied directly with `kubectl apply -k` against each overlay (bef
 - `staging`'s broadcaster only ever logs (`LOG_ONLY=true`, no `WEBHOOK_URL` in its env at all — confirmed via `kubectl exec ... -- printenv`).
 - `production`'s broadcaster actually forwards (confirmed `200` responses from webhook.site), and its `production-route` `HTTPRoute` serves the app on the shared Gateway exactly like the old `project` namespace did.
 - The GitOps part itself (`argocd-application-staging.yaml`/`argocd-application-production.yaml`, the `production` branch, `promote-production.yml`) was verified after pushing this commit — see the root README's "Exercise 4.9" section for that result.
+
+## Exercise 4.10: the grande finale — separate code and configuration repositories
+
+Everything described in "Exercise 4.9" above — `manifests/`, `kustomization.yaml`, `overlays/`, `argocd-application-staging.yaml`, `argocd-application-production.yaml`, every service's own `manifests/` subfolder, and `.github/workflows/promote-production.yml` — has moved out of this repository entirely, into **[ArthurLos/the-project-config](https://github.com/ArthurLos/the-project-config)**. This folder now holds only what actually gets built into a container image: `todo-app/`, `todo-backend/`, `wiki-reminder/`, `broadcaster/`, `db-backup/` each keep their source code, `Dockerfile`, and `.env.sample`/README — nothing Kubernetes-related.
+
+### Why
+
+ArgoCD already treats "the repo it watches" as the unit of truth; having that repo *also* contain the application source just blurs a boundary that's otherwise completely clean. A code change (fixing a bug in `todo-app/index.js`) and a config change (bumping a CPU limit, adding an environment) are different kinds of work with different review needs and change frequency — splitting them into two repos makes that distinction structural instead of a convention someone has to remember. It also means the config repo's commit/tag history is *only* ever about what's deployed, which is exactly what exercise 4.9's "a tagged commit promotes to production" is supposed to mean — tagging a release should be about "this configuration is ready for production," not accidentally coupled to whatever unrelated code changes happened to land in the same repo.
+
+### What changed mechanically
+
+- Every file under `manifests/`, `overlays/`, and the per-service `manifests/` subfolders was moved (not copied) to the same relative paths in the config repo, just rooted at that repo's root instead of under `the_project/` — so every Kustomize `../../<service>/manifests` reference in the overlays still resolves correctly, unchanged.
+- `argocd-application-staging.yaml`/`argocd-application-production.yaml` — only their `source.repoURL` changed, from this repo to `https://github.com/ArthurLos/the-project-config.git`, and `source.path` lost its `the_project/` prefix (e.g. `the_project/overlays/staging` → `overlays/staging`).
+- `.github/workflows/promote-production.yml` moved to the config repo too, now operating on *that* repo's own tags/branches — deliberately scoped there rather than crossing repos with a cross-repo token, since it's the config repo's own release history that should drive what reaches production, independent of this repo's course-exercise tags.
+- This repo's `.github/workflows/main.yaml` (already disabled since the GKE teardown, kept only for history) is now doubly out of date — it invokes a `kustomization.yaml` that no longer exists here — but since it only runs on `workflow_dispatch` and nobody is going back to GKE, it's left as historical reference rather than rewritten.
+
+### Applying the move live
+
+Re-pointing the two ArgoCD `Application`s at the new repo caused **zero** cluster changes — the manifests are byte-identical, only their source location changed:
+
+```bash
+kubectl delete application the-project-staging the-project-production -n argocd
+kubectl apply -f https://raw.githubusercontent.com/ArthurLos/the-project-config/main/argocd-application-staging.yaml
+kubectl apply -f https://raw.githubusercontent.com/ArthurLos/the-project-config/main/argocd-application-production.yaml
+```
+
+Both came back `Synced`/`Healthy` immediately at the config repo's own first commit SHA; `kubectl get pods -n staging`/`-n production` showed the exact same Pods, same `AGE`, `RESTARTS: 0` — confirming nothing actually redeployed, this was purely a bookkeeping change. The `v*`-tag-promotes-production mechanism (exercise 4.9) was re-verified end-to-end against the new repo too: pushing `v1.0.0` to `the-project-config` triggered its own `promote-production.yml`, which created that repo's `production` branch from scratch, picked up by ArgoCD automatically.

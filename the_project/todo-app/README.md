@@ -24,37 +24,30 @@ npm start
 
 ## Build and deploy
 
+**As of exercise 4.10**, this section's old `kubectl apply -f manifests/...` steps no longer apply — this app's manifests moved to [ArthurLos/the-project-config](https://github.com/ArthurLos/the-project-config) (see `../README.md`'s "Exercise 4.10"). Deployment is now via ArgoCD; this section only still covers building and locally importing the image:
+
 ```bash
 # build the image (bump the tag when the code changes)
-docker build -t todo-app:1.6.1 .
+docker build -t todo-app:1.7.0 .
 
 # get cluster name if you don't know it
 k3d cluster list
 
 # load it into your local cluster
-k3d image import todo-app:1.6.1 -c <cluster-name>
+k3d image import todo-app:1.7.0 -c <cluster-name>
 
-# the project namespace, ConfigMap and PersistentVolume/Claim must exist first (repo root, admin-managed resources),
-# and ../todo-backend must be deployed too (this app fetches/posts todos from it)
-kubectl apply -f ../../manifests/namespace-project.yaml
-kubectl apply -f manifests/configmap.yaml
-kubectl apply -f ../../manifests/todo-app-persistentvolume.yaml
-kubectl apply -f ../../manifests/todo-app-persistentvolumeclaim.yaml
-
-# update the image tag in manifests/deployment.yaml to match, then apply
-kubectl apply -f manifests/deployment.yaml
-kubectl apply -f manifests/service.yaml
-kubectl apply -f ../manifests/gateway.yaml
-kubectl rollout status deployment/todo-app -n project
+# bump the image tag in the-project-config's todo-app/manifests/deployment.yaml
+# to match, commit and push - ArgoCD picks it up automatically (staging on push to
+# main, production on a v* tag - see the-project-config's README)
 
 # confirm it's running
-kubectl get pods -n project
-kubectl logs -f <pod-name> -n project
+kubectl get pods -n staging    # or -n production
+kubectl logs -f <pod-name> -n staging
 ```
 
 ## Access it locally
 
-As of chapter 5, exposed via the shared `Gateway`/`HTTPRoute` (`../manifests/gateway.yaml`, Envoy Gateway — the cluster's Traefik ingress controller is disabled as of this chapter, so the old `manifests/ingress.yaml` is no longer used locally). Service is still plain `ClusterIP`. Reachable on whichever host port your cluster maps to the load balancer's port 80 (e.g. a k3d cluster created with `-p "8081:80@loadbalancer"` maps it to `http://localhost:8081`) — check your cluster's port mapping.
+As of chapter 5, exposed via the shared `Gateway`/`HTTPRoute` (Envoy Gateway — the cluster's Traefik ingress controller is disabled as of this chapter, so the old `manifests/ingress.yaml` is no longer used locally; as of exercise 4.10 that `HTTPRoute` is `production-route` in [the-project-config](https://github.com/ArthurLos/the-project-config)'s `overlays/production/gateway.yaml`). Service is still plain `ClusterIP`. Reachable on whichever host port your cluster maps to the load balancer's port 80 (e.g. a k3d cluster created with `-p "8081:80@loadbalancer"` maps it to `http://localhost:8081`) — check your cluster's port mapping.
 
 ## Troubleshooting: PVC stuck Pending
 

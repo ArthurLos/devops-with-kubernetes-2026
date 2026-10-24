@@ -12,6 +12,8 @@ As of exercise 2.4's `project` namespace split, this runs in `project` alongside
 
 ## Build and deploy
 
+**As of exercise 4.10**, this section's old `kubectl apply -f manifests/...` steps no longer apply — this app's manifests moved to [ArthurLos/the-project-config](https://github.com/ArthurLos/the-project-config) (see `../README.md`'s "Exercise 4.10"). Deployment is now via ArgoCD; this section only still covers building and locally importing the image:
+
 ```bash
 # build the image (bump the tag when the script changes)
 docker build -t wiki-reminder:1.0.0 .
@@ -22,14 +24,11 @@ k3d cluster list
 # load it into your local cluster
 k3d image import wiki-reminder:1.0.0 -c <cluster-name>
 
-# the project namespace and todo-backend must already exist (repo root / ../todo-backend)
-kubectl apply -f ../../manifests/namespace-project.yaml
-
-# update the image tag in manifests/cronjob.yaml to match, then apply
-kubectl apply -f manifests/cronjob.yaml
+# bump the image tag in the-project-config's wiki-reminder/manifests/cronjob.yaml
+# to match, commit and push - ArgoCD picks it up automatically
 
 # confirm it's scheduled
-kubectl get cronjobs -n project
+kubectl get cronjobs -n staging    # or -n production
 ```
 
 ## Testing

@@ -1,7 +1,0 @@
-# Historical only as of exercise 4.9 - the project namespace was retired in favor
-# of ../overlays/staging and ../overlays/production (see ../README.md's "Exercise
-# 4.9" section). Kept for the exercise tags that predate that split.
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: project
