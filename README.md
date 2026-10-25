@@ -5,9 +5,10 @@ Submissions for the DevOps with Kubernetes course.
 Structure:
 - `log_output/` — the logging exercise project (early exercises)
 - `ping-pong/` — simple counter app, sharing a Gateway with `log_output`
-- `the_project/` — the main course project, growing over time (contains one subfolder per microservice, e.g. `todo-app/`). As of exercise 3.5, deployed to GKE as one unit via Kustomize (`the_project/kustomization.yaml`) — see `the_project/README.md`.
+- `the_project/` — the main course project, growing over time (contains one subfolder per microservice, e.g. `todo-app/`). As of exercise 3.5, deployed to GKE as one unit via Kustomize (`the_project/kustomization.yaml`) — see `the_project/README.md`. As of exercise 4.10, its Kubernetes configuration lives in a separate repository (see below) — this folder keeps only application source code.
 - `manifests/` — manifests that are either shared across apps or inherently cluster/admin-level (Namespaces, PersistentVolumes). Includes the two Namespaces (see below), the Gateway/HTTPRoute shared by `log_output` and `ping-pong` (`gateway.yaml`, see note below), and `todo-app`'s own PersistentVolume/Claim for its cached picture (not app-specific resources, so kept separate from `todo-app`'s own `manifests/` folder even though only it uses this PV). `ping-pong`'s counter moved from its own PV to a Postgres `StatefulSet` in exercise 2.7 — see `ping-pong/manifests/`.
 - `monitoring-query/` — exercise 4.3's Prometheus/Helm write-up and query result (the Helm values files it refers to live in the gitignored, not-graded `monitoring/` folder — chapter 3 reading material).
+- `dummysite/` — chapter 6, exercise 5.1: a `DummySite` Custom Resource Definition and a hand-written controller for it. Standalone, deployed to the `exercises` namespace — see `dummysite/README.md`.
 
 **NATS (chapter 5, exercise 4.6):** installed locally via Helm (`helm install my-nats nats/nats --namespace nats --create-namespace --set promExporter.enabled=true`), same as the course's "Messaging systems" reading material. `the_project/todo-backend` publishes todo create/update events to it; `the_project/broadcaster` is a new service that subscribes and forwards them to an external chat service — see `the_project/broadcaster/README.md`. Prometheus/Grafana scrape and visualize NATS' own metrics too, via the gitignored `monitoring/prom-values.yaml` and `monitoring/grafana-values.yaml` (same not-graded chapter-3 reading-material files `monitoring-query/` already refers to).
 
@@ -84,3 +85,7 @@ Each finished exercise gets a git tag named after the exercise (e.g. `1.1`, `1.2
 - [4.8.](https://github.com/ArthurLos/devops-with-kubernetes-2026/tree/4.8/the_project)
 - [4.9.](https://github.com/ArthurLos/devops-with-kubernetes-2026/tree/4.9/the_project)
 - [4.10.](https://github.com/ArthurLos/devops-with-kubernetes-2026/tree/4.10/the_project)
+
+### Chapter 6
+
+- [5.1.](https://github.com/ArthurLos/devops-with-kubernetes-2026/tree/5.1/dummysite)

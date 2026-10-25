@@ -1,0 +1,36 @@
+# Exercise 5.1: identity + permissions for the controller (see ../README.md for why
+# a ClusterRole/ClusterRoleBinding, not a namespace-scoped Role, same reasoning as
+# the course's own Countdown example - DummySites can exist in any namespace).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dummysite-controller-account
+  namespace: exercises
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: dummysite-controller-role
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps", "services"]
+    verbs: ["get", "list", "create"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "create"]
+  - apiGroups: ["stable.dwk"]
+    resources: ["dummysites"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: dummysite-controller-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: dummysite-controller-role
+subjects:
+  - kind: ServiceAccount
+    name: dummysite-controller-account
+    namespace: exercises

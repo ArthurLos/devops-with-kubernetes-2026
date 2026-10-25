@@ -1,0 +1,35 @@
+# Exercise 5.1: defines a new resource type, DummySite, used to create a served
+# copy of any website. Same group convention (stable.dwk) as the course's own
+# Countdown CRD example, just a different kind/schema.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: dummysites.stable.dwk
+spec:
+  group: stable.dwk
+  scope: Namespaced
+  names:
+    kind: DummySite
+    plural: dummysites
+    singular: dummysite
+    shortNames:
+      - ds
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - website_url
+              properties:
+                website_url:
+                  type: string
+      additionalPrinterColumns:
+        - name: URL
+          type: string
+          jsonPath: .spec.website_url

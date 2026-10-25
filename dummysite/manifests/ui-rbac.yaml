@@ -1,0 +1,32 @@
+# The UI only ever creates DummySites in its own namespace (exercises), so a
+# namespaced Role/RoleBinding is enough here - unlike ../controller-rbac.yaml's
+# ClusterRole, which needs to watch DummySites across every namespace.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dummysite-ui-account
+  namespace: exercises
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dummysite-ui-role
+  namespace: exercises
+rules:
+  - apiGroups: ["stable.dwk"]
+    resources: ["dummysites"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dummysite-ui-binding
+  namespace: exercises
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: dummysite-ui-role
+subjects:
+  - kind: ServiceAccount
+    name: dummysite-ui-account
+    namespace: exercises

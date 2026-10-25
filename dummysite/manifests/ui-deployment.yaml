@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dummysite-ui-dep
+  namespace: exercises
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dummysite-ui
+  template:
+    metadata:
+      labels:
+        app: dummysite-ui
+    spec:
+      serviceAccountName: dummysite-ui-account
+      containers:
+        - name: dummysite-ui
+          image: dummysite-ui:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          env:
+            - name: BASE_PATH
+              # Matches ../manifests/gateway.yaml's HTTPRoute path - see index.js's
+              # own comment on BASE_PATH for why this app needs to know it at all.
+              value: /dummysite
+          readinessProbe:
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            httpGet:
+              path: /healthz
+              port: 3000
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dummysite-ui-svc
+  namespace: exercises
+spec:
+  selector:
+    app: dummysite-ui
+  ports:
+    - port: 3000
+      targetPort: 3000

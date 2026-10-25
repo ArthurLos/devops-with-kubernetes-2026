@@ -1,0 +1,26 @@
+# Exposes the UI on the shared Gateway (../../manifests/gateway.yaml) under its own
+# path, same pattern as ping-pong's /pingpong - the app itself only ever knows about
+# "/", "/create", "/sites/<name>", not this prefix, so the path is rewritten away
+# before it reaches dummysite-ui-svc.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: dummysite-route
+  namespace: exercises
+spec:
+  parentRefs:
+    - name: my-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /dummysite
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /
+      backendRefs:
+        - name: dummysite-ui-svc
+          port: 3000
