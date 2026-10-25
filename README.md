@@ -9,6 +9,7 @@ Structure:
 - `manifests/` — manifests that are either shared across apps or inherently cluster/admin-level (Namespaces, PersistentVolumes). Includes the two Namespaces (see below), the Gateway/HTTPRoute shared by `log_output` and `ping-pong` (`gateway.yaml`, see note below), and `todo-app`'s own PersistentVolume/Claim for its cached picture (not app-specific resources, so kept separate from `todo-app`'s own `manifests/` folder even though only it uses this PV). `ping-pong`'s counter moved from its own PV to a Postgres `StatefulSet` in exercise 2.7 — see `ping-pong/manifests/`.
 - `monitoring-query/` — exercise 4.3's Prometheus/Helm write-up and query result (the Helm values files it refers to live in the gitignored, not-graded `monitoring/` folder — chapter 3 reading material).
 - `dummysite/` — chapter 6, exercise 5.1: a `DummySite` Custom Resource Definition and a hand-written controller for it. Standalone, deployed to the `exercises` namespace — see `dummysite/README.md`.
+- `service-mesh/` — chapter 6, exercise 5.2: [Istio](https://istio.io/) in ambient mode on the local k3d cluster, working through the official getting-started guide (Bookinfo sample app, Kiali, L4/L7 authorization policies, traffic splitting) — see `service-mesh/README.md`.
 
 **NATS (chapter 5, exercise 4.6):** installed locally via Helm (`helm install my-nats nats/nats --namespace nats --create-namespace --set promExporter.enabled=true`), same as the course's "Messaging systems" reading material. `the_project/todo-backend` publishes todo create/update events to it; `the_project/broadcaster` is a new service that subscribes and forwards them to an external chat service — see `the_project/broadcaster/README.md`. Prometheus/Grafana scrape and visualize NATS' own metrics too, via the gitignored `monitoring/prom-values.yaml` and `monitoring/grafana-values.yaml` (same not-graded chapter-3 reading-material files `monitoring-query/` already refers to).
 
@@ -89,3 +90,4 @@ Each finished exercise gets a git tag named after the exercise (e.g. `1.1`, `1.2
 ### Chapter 6
 
 - [5.1.](https://github.com/ArthurLos/devops-with-kubernetes-2026/tree/5.1/dummysite)
+- [5.2.](https://github.com/ArthurLos/devops-with-kubernetes-2026/tree/5.2/service-mesh)
