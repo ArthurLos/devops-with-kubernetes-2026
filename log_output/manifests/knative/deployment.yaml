@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: log-output
+  namespace: exercises
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: log-output
+  template:
+    metadata:
+      labels:
+        app: log-output
+    spec:
+      volumes:
+        - name: shared-status
+          emptyDir: {}
+        - name: log-output-config
+          configMap:
+            name: log-output-config
+            items:
+              - key: information
+                path: information.txt
+      containers:
+        - name: writer
+          image: log-output-writer:1.1.0
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: shared-status
+              mountPath: /usr/src/app/shared
+        - name: reader
+          image: log-output-reader:1.6.0
+          imagePullPolicy: IfNotPresent
+          readinessProbe:
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            httpGet:
+              path: /healthz
+              port: 3000
+          env:
+            - name: PORT
+              value: "3000"
+            - name: MESSAGE
+              valueFrom:
+                configMapKeyRef:
+                  name: log-output-config
+                  key: MESSAGE
+            # Fully-qualified cluster DNS name, not the bare "ping-pong" Service name:
+            # ping-pong is now a Knative Service (../../ping-pong/manifests/knative/ksvc.yaml),
+            # backed by an ExternalName Service pointing at Kourier's internal gateway, which
+            # routes by Host header. A bare hostname in the request's Host header doesn't match
+            # what Kourier expects, and the request 404s - the FQDN does.
+            - name: PINGPONG_URL
+              value: http://ping-pong.exercises.svc.cluster.local/pings
+          volumeMounts:
+            - name: shared-status
+              mountPath: /usr/src/app/shared
+            - name: log-output-config
+              mountPath: /usr/src/app/config

@@ -227,3 +227,66 @@ kubectl argo rollouts get rollout ping-pong -n exercises --watch
 ArgoCD, NATS and the Argo Rollouts controller were all uninstalled from the local cluster once chapter 6 began (none of the remaining exercises need them, and canary analysis's job — gradually shifting traffic between two versions — is superseded by Istio/Gateway API traffic splitting, used for `../greeter` in exercise 5.3). That left `manifests/rollout.yaml`'s `Rollout` orphaned: the CRD (`rollouts.argoproj.io`) is still installed cluster-wide, but nothing reconciles it into Pods anymore.
 
 `manifests/rollout.yaml` was replaced by `manifests/deployment.yaml` — a plain `Deployment` with the exact same container spec (image, env, `readinessProbe`), no canary strategy, and `replicas` back down to `1` (the only reason it was `2` — a meaningful `setWeight: 50` canary step — no longer applies), which also resolves the known counter-race limitation above. The `cpu-usage-rate` `AnalysisTemplate` was dropped entirely along with it. The `4.4` git tag still has the original `Rollout`/`AnalysisTemplate`-based manifest if you need to see exactly how that exercise looked.
+
+## Exercise 5.7: deploy to serverless
+
+`manifests/knative/ksvc.yaml` is a [Knative](https://knative.dev/) `Service` (`serving.knative.dev/v1`) standing in for the plain `manifests/deployment.yaml` — same container spec (image, env, `readinessProbe`), minus `PORT` (Knative reserves that env var and injects it itself from `containerPort`). Deployed on the dedicated `knative` cluster from exercise 5.6, not the main one — see `../knative/README.md` for the cluster itself.
+
+Local images need re-tagging under a registry Knative's admission webhook already knows to skip tag-to-digest resolution for (`config-deployment`'s `registries-skipping-tag-resolving`, defaults to `kind.local,ko.local,dev.local`) — otherwise it tries to resolve the plain `ping-pong:2.3.0` tag against Docker Hub and fails with a `401 Unauthorized`:
+
+```bash
+docker tag ping-pong:2.3.0 dev.local/ping-pong:2.3.0
+k3d image import dev.local/ping-pong:2.3.0 -c knative
+
+kubectl apply -f ../manifests/namespace-exercises.yaml
+kubectl apply -f manifests/postgres-secret.yaml
+kubectl apply -f manifests/postgres.yaml
+kubectl apply -f manifests/knative/ksvc.yaml
+kubectl get ksvc ping-pong -n exercises
+# URL: http://ping-pong.exercises.172.19.0.3.sslip.io
+```
+
+**Tested** the same way as `../knative/README.md`'s own examples (`curl` with an explicit `Host` header, since this cluster has no Gateway to route a real hostname):
+
+```bash
+curl -H "Host: ping-pong.exercises.172.19.0.3.sslip.io" http://localhost:8081       # pong 0
+curl -H "Host: ping-pong.exercises.172.19.0.3.sslip.io" http://localhost:8081       # pong 1
+curl -H "Host: ping-pong.exercises.172.19.0.3.sslip.io" http://localhost:8081/pings # 1
+```
+
+The counter persists across requests exactly as before — nothing about *how* ping-pong is called changed, Postgres is still a plain `StatefulSet`/`Service`, only ping-pong itself moved from an always-on `Deployment` to an on-demand Knative `Service` (scaling to zero when idle, same as `../knative/README.md`'s `hello` example).
+
+### Why `../log_output` needs the fully-qualified DNS name
+
+Per the exercise's own tip, `../log_output/manifests/knative/deployment.yaml` points `PINGPONG_URL` at `http://ping-pong.exercises.svc.cluster.local/pings`, not the bare `http://ping-pong/pings` every other cluster in this repo uses. The reason is concrete, not just a convention: Knative's own `kubectl get svc -n exercises` shows *why* —
+
+```
+ping-pong   ExternalName   <none>   kourier-internal.kourier-system.svc.cluster.local   80/TCP
+```
+
+`ping-pong` is an `ExternalName` Service that CNAMEs to Kourier's internal gateway, which then routes purely by the HTTP `Host` header — and a bare-hostname request sends `Host: ping-pong`, which doesn't match anything Kourier knows how to route. **Tested both, from inside the `log-output` reader container**, to confirm this isn't theoretical:
+
+```
+bare name (http://ping-pong/pings):                        status 404
+FQDN (http://ping-pong.exercises.svc.cluster.local/pings):  status 200, body: 1
+```
+
+With the FQDN in place, `../log_output`'s own `/status` works end-to-end against the serverless ping-pong, same as on the main cluster:
+
+```bash
+kubectl apply -f ../log_output/manifests/configmap.yaml
+kubectl apply -f ../log_output/manifests/knative/deployment.yaml
+kubectl apply -f ../log_output/manifests/service.yaml
+
+kubectl port-forward svc/log-output-svc -n exercises 8091:2345
+curl http://localhost:8091/status
+# file content: this text is from file
+# env variable: MESSAGE=hello world
+# 2026-10-26T14:58:59.922Z: d64598ae-fa52-4b7b-acd8-33ccdeb1f3c2.
+# Ping / Pongs: 1
+# greetings:
+```
+
+(`greetings:` is empty — `../greeter` from exercise 5.3 isn't deployed on this throwaway cluster, and the reader already fails that fetch gracefully.)
+
+The exercise's tip about a Gateway `URLRewrite`'s `hostname` field is for making the serverless endpoint reachable from a real browser too, via a Gateway API implementation (e.g. Envoy Gateway, as `../manifests/gateway.yaml` already is on the main cluster) that isn't installed on this one — skipped here since it isn't needed to demonstrate the actual requirement (ping-pong running serverless, reachable, and used correctly by `../log_output`), and the `curl -H "Host: ..."` approach above, already established for every example in `../knative/README.md`, verifies the same thing just as conclusively.
