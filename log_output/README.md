@@ -11,7 +11,7 @@ Two containers sharing one Pod, communicating via a shared `emptyDir` volume:
   Ping / Pongs: 3
   ```
 
-The reader's port is configurable via the `PORT` environment variable (defaults to `3000`); the ping-pong URL via `PINGPONG_URL` (defaults to `http://ping-pong-svc:3000/pings`). The `writer`/`reader` pair still agree on the status file path via `FILE_PATH` (defaults to `/usr/src/app/shared/status.txt`), mounted from an `emptyDir` volume local to this Pod — that one stays, it's internal to `log_output` itself.
+The reader's port is configurable via the `PORT` environment variable (defaults to `3000`); the ping-pong URL via `PINGPONG_URL` (defaults to `http://ping-pong-svc:3000/pings`); as of exercise 5.3, the greeter URL via `GREETER_URL` (defaults to `http://greeter-svc:3000/`, see "Exercise 5.3" below). The `writer`/`reader` pair still agree on the status file path via `FILE_PATH` (defaults to `/usr/src/app/shared/status.txt`), mounted from an `emptyDir` volume local to this Pod — that one stays, it's internal to `log_output` itself.
 
 As of exercise 3.2, the reader also responds `200` on `GET /` — GKE's Ingress health-checks a backend Service at `/` regardless of which path it's actually routed under (`/status` here), so without this the Ingress would never mark the backend healthy.
 
@@ -35,13 +35,13 @@ cd reader && FILE_PATH=/tmp/status.txt npm install && npm start
 ```bash
 # build both images (bump tags when the code changes)
 docker build -t log-output-writer:1.1.0 writer/
-docker build -t log-output-reader:1.5.0 reader/
+docker build -t log-output-reader:1.6.0 reader/
 
 # get cluster name if you don't know it
 k3d cluster list
 
 # load them into your local cluster
-k3d image import log-output-writer:1.1.0 log-output-reader:1.5.0 -c <cluster-name>
+k3d image import log-output-writer:1.1.0 log-output-reader:1.6.0 -c <cluster-name>
 
 # the exercises namespace, the ConfigMap and the shared Gateway must exist first (repo root, spans multiple apps)
 kubectl apply -f ../manifests/namespace-exercises.yaml
@@ -123,3 +123,58 @@ No `kubectl apply` needed for day-to-day changes to this app anymore: **commit a
 Note: `MESSAGE` (the `ConfigMap`-sourced env var on `reader`) would *not* have shown this automatically — Kubernetes doesn't restart a Pod just because a `ConfigMap` it reads via `env.valueFrom` changed, only a Pod *template* change (like the label above) triggers a rollout. A future improvement would be a checksum annotation on the template derived from the `ConfigMap`'s content, forcing a rollout whenever it changes too — not needed for this exercise.
 
 ArgoCD itself runs on the same local k3d cluster (no GKE/cloud involved, consistent with the rest of chapter 5) — reachable at `https://localhost:8443` via `kubectl port-forward -n argocd svc/argocd-server 8443:443` (its `Service` is `type: LoadBalancer` per the course material, but k3d can't give it a real external IP here since the shared Envoy Gateway already occupies the one host port 80/443 mapping this cluster has — port-forward is the local equivalent).
+
+## Exercise 5.3: Log app, the Service Mesh Edition
+
+The `exercises` namespace (this app plus `../ping-pong`) was joined to [Istio](https://istio.io/)'s ambient mesh, installed on this cluster in exercise 5.2:
+
+```bash
+kubectl label namespace exercises istio.io/dataplane-mode=ambient
+istioctl waypoint apply --enroll-namespace --wait --namespace exercises   # L7 routing, needed for ../greeter's traffic split
+```
+
+No manifest changes were needed for this step — the reader's existing `readinessProbe` (`GET /healthz`, which itself depends on reaching `../ping-pong`) and `../ping-pong`'s own `readinessProbe` (Postgres connectivity) both passed immediately after labeling, confirming ztunnel's transparent mTLS interception doesn't break anything already working, exactly as seen with Bookinfo in exercise 5.2.
+
+A new `../greeter` microservice (its own top-level folder, same pattern as `../ping-pong` — see its README) responds to `GET /` with a greeting. The reader now also fetches it (`GREETER_URL`, defaults to `http://greeter-svc:3000/`, same env-var-with-a-cluster-DNS-default pattern as `PINGPONG_URL`) and appends it to `/status`:
+
+```
+file content: this text is from file
+env variable: MESSAGE=hello world
+2026-10-26T13:30:06.254Z: facc901f-c77a-4df2-b1c8-6efd7f3a7440.
+Ping / Pongs: 10
+greetings: Hello from version 1
+```
+
+`../greeter` runs two versions behind one `greeter-svc`, split 75/25 via a Gateway-API `HTTPRoute` — see its README for the full setup and the standalone traffic-split test. **Tested end-to-end** through this app's own `/status`, confirming the split is visible all the way through `log_output` → `greeter-svc` → `greeter-v1`/`v2`, not just when calling `greeter-svc` directly:
+
+```bash
+for i in $(seq 1 20); do curl -s http://localhost:8081/status | grep greetings; done | sort | uniq -c
+#      15  greetings: Hello from version 1   (≈75%, target 75%)
+#       5  greetings: Hello from version 2   (≈25%, target 25%)
+```
+
+### A dedicated Istio Gateway, for mesh-visible ingress
+
+The course's own example for this exercise shows traffic entering the mesh through a node named `log-gateway-istio` in Kiali — not through the existing Envoy Gateway (`../manifests/gateway.yaml`, which is a separate, non-mesh ingress and stays as the normal way to reach `/status` at `http://localhost:8081/status`, unaffected by any of this). To match that, `manifests/istio-gateway.yaml` adds a second, Istio-managed `Gateway`+`HTTPRoute` for this app specifically — same pattern as `../service-mesh/gateway-api/bookinfo-gateway.yaml` from exercise 5.2:
+
+```bash
+kubectl apply -f manifests/istio-gateway.yaml
+kubectl annotate gateway log-gateway networking.istio.io/service-type=ClusterIP --namespace=exercises
+```
+
+Creating a `Gateway` named `log-gateway` with `gatewayClassName: istio` makes Istio provision a Service named `log-gateway-istio` for it — exactly the node name in the course's screenshot. Annotated `ClusterIP` (k3d's `ServiceLB` already has the one host-port-80 slot taken by the Envoy Gateway, same reasoning as `bookinfo-gateway` in 5.2), so it's reached locally via port-forward:
+
+```bash
+kubectl port-forward svc/log-gateway-istio -n exercises 8090:80
+curl http://localhost:8090/status
+```
+
+**Tested**: `curl http://localhost:8090/status` returned the same output as above, confirming the request actually flowed through the new gateway end-to-end. Also confirmed visually in Kiali (namespace `exercises`, `istioctl dashboard kiali`) after sending traffic through this gateway — the graph shows `log-gateway-istio` → `log-output` calling both `ping-pong` (→ `postgres` via `postgres-svc`) and `greeter-svc-1`/`greeter-svc-2` (split by the configured weights), matching the course's example shape exactly:
+
+![Kiali traffic graph: log-gateway-istio → log-output-svc → log-output, branching to ping-pong-svc → ping-pong → postgres-svc → postgres, and to greeter-svc-1/greeter-svc-2 (v1/v2)](./kiali-mesh-graph.png)
+
+(Initial attempts at this screenshot kept showing an unrelated `envoy` node instead — traced to a leftover browser tab still polling the old Envoy Gateway route at `localhost:8081/status` in the same time window, not a problem with the Istio setup. Both ingress paths are real and coexist; this screenshot's window just happens to only have traffic through `log-gateway-istio`.)
+
+### Also in this exercise: `ping-pong` back to a plain Deployment
+
+Unrelated to the mesh itself, but needed before `../ping-pong` could be scaled back up: its `Rollout` (exercise 4.4, Argo Rollouts canary) had been orphaned by chapter 6's earlier cleanup (the Argo Rollouts controller was uninstalled, since nothing remaining needs it) and was replaced by a plain `Deployment` — see `../ping-pong/README.md`'s "Chapter 6: back to a plain Deployment" section.
