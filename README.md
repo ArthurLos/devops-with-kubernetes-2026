@@ -12,6 +12,7 @@ Structure:
 - `service-mesh/` — chapter 6, exercise 5.2: [Istio](https://istio.io/) in ambient mode on the local k3d cluster, working through the official getting-started guide (Bookinfo sample app, Kiali, L4/L7 authorization policies, traffic splitting) — see `service-mesh/README.md`.
 - `greeter/` — chapter 6, exercise 5.3: a small greeting microservice `log_output` calls, deployed in two versions split 75/25 via a mesh-internal Gateway API `HTTPRoute` — see `greeter/README.md` and `log_output/README.md`'s "Exercise 5.3" section.
 - `wikipedia/` — chapter 6, exercise 5.4: one Pod with an `nginx` main container, a plain init container that fetches a Wikipedia page once, and a native sidecar container that periodically overwrites it with a random one — see `wikipedia/README.md`.
+- `knative/` — chapter 6, exercise 5.6: [Knative Serving](https://knative.dev/) (Kourier + Magic DNS) on its own, separate k3d cluster — scale-to-zero, autoscaling, and traffic-splitting examples — see `knative/README.md`.
 
 **NATS (chapter 5, exercise 4.6):** installed locally via Helm (`helm install my-nats nats/nats --namespace nats --create-namespace --set promExporter.enabled=true`), same as the course's "Messaging systems" reading material. `the_project/todo-backend` publishes todo create/update events to it; `the_project/broadcaster` is a new service that subscribes and forwards them to an external chat service — see `the_project/broadcaster/README.md`. Prometheus/Grafana scrape and visualize NATS' own metrics too, via the gitignored `monitoring/prom-values.yaml` and `monitoring/grafana-values.yaml` (same not-graded chapter-3 reading-material files `monitoring-query/` already refers to).
 
@@ -95,3 +96,4 @@ Each finished exercise gets a git tag named after the exercise (e.g. `1.1`, `1.2
 - [5.2.](https://github.com/ArthurLos/devops-with-kubernetes-2026/tree/5.2/service-mesh)
 - [5.3.](https://github.com/ArthurLos/devops-with-kubernetes-2026/tree/5.3/greeter)
 - [5.4.](https://github.com/ArthurLos/devops-with-kubernetes-2026/tree/5.4/wikipedia)
+- [5.6.](https://github.com/ArthurLos/devops-with-kubernetes-2026/tree/5.6/knative)

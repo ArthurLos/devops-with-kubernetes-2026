@@ -1,0 +1,14 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: autoscale-go
+  namespace: default
+spec:
+  template:
+    metadata:
+      annotations:
+        # Target 10 in-flight requests per pod (default is 100).
+        autoscaling.knative.dev/target: "10"
+    spec:
+      containers:
+      - image: ghcr.io/knative/autoscale-go:latest
