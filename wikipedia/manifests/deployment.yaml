@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wikipedia
+  namespace: exercises
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wikipedia
+  template:
+    metadata:
+      labels:
+        app: wikipedia
+    spec:
+      volumes:
+        - name: www
+          emptyDir: {}
+      initContainers:
+        # Plain init container: runs to completion before the main container starts,
+        # so nginx never serves an empty webroot.
+        - name: fetch-kubernetes-page
+          image: curlimages/curl:8.16.0
+          command:
+            - sh
+            - -c
+            - curl -sL -o /www/index.html https://en.wikipedia.org/wiki/Kubernetes
+          volumeMounts:
+            - name: www
+              mountPath: /www
+        # Native sidecar (restartPolicy: Always on an initContainer, stable since k8s
+        # 1.29): starts alongside the main container and keeps running for the Pod's
+        # whole lifetime, instead of blocking startup like the plain init container above.
+        - name: random-page-refresher
+          image: curlimages/curl:8.16.0
+          restartPolicy: Always
+          command:
+            - sh
+            - -c
+            - |
+              while true; do
+                # 5-15 minutes, in seconds. $RANDOM isn't guaranteed in every /bin/sh,
+                # so two random bytes from /dev/urandom are read directly instead.
+                sleep "$(( $(od -An -N2 -tu2 /dev/urandom) % 601 + 300 ))"
+                curl -sL -o /www/index.html https://en.wikipedia.org/wiki/Special:Random
+              done
+          volumeMounts:
+            - name: www
+              mountPath: /www
+      containers:
+        - name: nginx
+          image: nginx:alpine
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: www
+              mountPath: /usr/share/nginx/html
